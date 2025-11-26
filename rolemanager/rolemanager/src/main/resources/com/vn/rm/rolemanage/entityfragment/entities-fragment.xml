@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<fragment xmlns="http://jmix.io/schema/flowui/fragment">
+
+    <data>
+        <collection id="resourcePoliciesDc" class="io.jmix.security.model.ResourcePolicyModel"/>
+        <collection id="entityMatrixDc" class="com.vn.rm.rolemanage.entityfragment.EntityMatrixRow"/>
+        <collection id="attrMatrixDc" class="io.jmix.securityflowui.view.resourcepolicy.AttributeResourceModel"/>
+    </data>
+
+    <content>
+        <!-- Root vbox expand split -->
+        <vbox id="root" width="100%" height="100%" expand="split" padding="false" spacing="false">
+
+            <split id="split" width="100%" height="100%" themeNames="splitter-spacing" splitterPosition="60">
+
+                <!-- Bên trái: Entities - expand bảng entityMatrixTable -->
+                <vbox width="100%" height="100%" expand="entityMatrixTable" padding="false">
+                    <h3 text="Entities permissions" classNames="m-0 py-s px-m"/>
+
+                    <!-- Đã bỏ theme compact để dòng cao hơn -->
+                    <dataGrid id="entityMatrixTable"
+                              dataContainer="entityMatrixDc"
+                              width="100%"
+                              height="100%"
+                              minHeight="20em">
+                        <columns resizable="true">
+                            <column property="entityCaption" header="Entity" width="300px" />
+                            <column key="allowAllCol" header="Allow All" width="80px" />
+                            <column key="createCol" header="Create" width="80px" />
+                            <column key="readCol" header="Read" width="80px" />
+                            <column key="updateCol" header="Update" width="80px" />
+                            <column key="deleteCol" header="Delete" width="80px" />
+                            <column property="attributes" header="Attrs" width="100px"/>
+                        </columns>
+                    </dataGrid>
+                </vbox>
+
+                <!-- Bên phải: Attributes - expand bảng attrMatrixTable -->
+                <vbox width="100%" height="100%" expand="attrMatrixTable" padding="false">
+                    <div classNames="flex flex-row items-center gap-s py-s px-m">
+                        <h3 text="Attributes Permissions" classNames="m-0"/>
+                        <span id="attrEntityLabel" classNames="text-secondary font-bold"/>
+                    </div>
+
+                    <dataGrid id="attrMatrixTable"
+                              dataContainer="attrMatrixDc"
+                              width="100%"
+                              height="100%">
+                        <columns resizable="true">
+                            <column property="name" key="name" header="Attribute" flexGrow="1"/>
+                            <column key="viewCol" header="View" width="80px" flexGrow="0"/>
+                            <column key="modifyCol" header="Modify" width="80px" flexGrow="0"/>
+                        </columns>
+                    </dataGrid>
+                </vbox>
+            </split>
+        </vbox>
+    </content>
+</fragment>

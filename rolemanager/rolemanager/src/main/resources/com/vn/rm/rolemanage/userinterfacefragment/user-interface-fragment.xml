@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<fragment xmlns="http://jmix.io/schema/flowui/fragment">
+
+    <data>
+        <instance id="roleModelDc" class="io.jmix.security.model.ResourceRoleModel">
+            <collection id="resourcePoliciesDc" property="resourcePolicies"/>
+        </instance>
+        <collection id="policyTreeDc" class="com.vn.rm.rolemanage.userinterfacefragment.PolicyGroupNode"/>
+    </data>
+
+    <content>
+        <vbox id="policyBox" padding="true" spacing="true">
+            <hbox spacing="true" alignItems="CENTER">
+<!--                <checkbox id="showAssignedOnly" label="Show Assigned Only"/>-->
+                <checkbox id="allowAllViews" label="Allow all views"/>
+            </hbox>
+
+            <h3>Resource Policies (Tree)</h3>
+            <treeDataGrid id="policyTreeGrid"
+                          dataContainer="policyTreeDc"
+                          hierarchyProperty="parent"
+                          width="100%"
+                          minHeight="35em"/>
+        </vbox>
+    </content>
+</fragment>

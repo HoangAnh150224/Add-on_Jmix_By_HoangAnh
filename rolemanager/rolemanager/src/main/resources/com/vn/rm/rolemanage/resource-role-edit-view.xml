@@ -1,0 +1,81 @@
+<view xmlns="http://jmix.io/schema/flowui/view"
+      title="msg://resourceRoleEditView.title">
+
+    <data>
+        <instance id="roleModelDc" class="io.jmix.security.model.ResourceRoleModel">
+            <fetchPlan extends="_base">
+                <property name="resourcePolicies" fetchPlan="_base"/>
+            </fetchPlan>
+            <collection id="resourcePoliciesDc" property="resourcePolicies"/>
+        </instance>
+
+        <collection id="entityMatrixDc"
+                    class="com.vn.rm.rolemanage.entityfragment.EntityMatrixRow"/>
+        <collection id="childRolesDc"
+                    class="io.jmix.security.model.ResourceRoleModel"/>
+        <collection id="policyTreeDc"
+                    class="com.vn.rm.rolemanage.userinterfacefragment.PolicyGroupNode" />
+    </data>
+
+    <facets>
+        <settings auto="true"/>
+        <dataLoadCoordinator auto="true"/>
+    </facets>
+
+    <actions>
+        <action id="saveAction" type="detail_saveClose"/>
+        <action id="closeAction" type="detail_close"/>
+    </actions>
+
+    <!-- THAY ĐỔI QUAN TRỌNG: Thêm expand="tabsBox" vào layout chính -->
+    <layout height="100%" expand="tabsBox">
+
+        <!-- Form nhập liệu ở trên -->
+        <vbox id="contentBox" width="100%" padding="false" spacing="false">
+            <formLayout id="form" dataContainer="roleModelDc" width="100%">
+                <textField id="nameField" property="name" required="true" themeNames="small"/>
+                <textField id="sourceField" property="source" readOnly="true" themeNames="small"/>
+                <textField id="codeField" property="code" readOnly="true" themeNames="small"/>
+                <checkboxGroup id="scopesField" property="scopes" required="true"
+                               themeNames="small helper-above-field"/>
+                <textArea id="descriptionField" property="description" height="6em" themeNames="small"/>
+            </formLayout>
+        </vbox>
+
+        <!-- Khối chứa TabSheet: Sẽ chiếm toàn bộ chiều cao còn lại -->
+        <vbox id="tabsBox"
+              width="100%"
+              height="100%"
+              expand="permissionsTabs">
+
+            <tabSheet id="permissionsTabs" width="100%" height="100%">
+                <tab id="entitiesTab" label="Entities &amp; Attributes">
+                    <!-- Fragment container phải full height và expand fragment -->
+                    <vbox id="entitiesTabContent"
+                          width="100%" height="100%"
+                          expand="entitiesFragment"
+                          padding="false" spacing="false">
+                        <fragment id="entitiesFragment"
+                                  class="com.vn.rm.rolemanage.entityfragment.EntitiesFragment"/>
+                    </vbox>
+                </tab>
+
+                <tab id="uiTab" label="UI &amp; Menus">
+                    <vbox id="uiTabContent"
+                          width="100%" height="100%"
+                          expand="userInterfaceFragment"
+                          padding="false" spacing="false">
+                        <fragment id="userInterfaceFragment"
+                                  class="com.vn.rm.rolemanage.userinterfacefragment.UserInterfaceFragment"/>
+                    </vbox>
+                </tab>
+            </tabSheet>
+        </vbox>
+
+        <!-- Actions Bar ở dưới cùng -->
+        <hbox id="detailActions" classNames="px-m py-s bg-contrast-5" width="100%">
+            <button id="saveAndCloseBtn" action="saveAction"/>
+            <button id="closeBtn" action="closeAction"/>
+        </hbox>
+    </layout>
+</view>

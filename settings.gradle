@@ -1,0 +1,5 @@
+rootProject.name = 'Hoanganh'
+
+includeBuild 'rolemanager'
+includeBuild 'app'
+includeBuild 'app'
