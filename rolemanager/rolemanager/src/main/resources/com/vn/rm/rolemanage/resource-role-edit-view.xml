@@ -1,5 +1,5 @@
 <view xmlns="http://jmix.io/schema/flowui/view"
-      title="msg://resourceRoleEditView.title">
+      title="">
 
     <data>
         <instance id="roleModelDc" class="io.jmix.security.model.ResourceRoleModel">
@@ -15,6 +15,8 @@
                     class="io.jmix.security.model.ResourceRoleModel"/>
         <collection id="policyTreeDc"
                     class="com.vn.rm.rolemanage.userinterfacefragment.PolicyGroupNode" />
+        <collection id="specificDc"
+                    class="com.vn.rm.rolemanage.specificfragment.SpecificNode" />
     </data>
 
     <facets>
@@ -69,6 +71,14 @@
                                   class="com.vn.rm.rolemanage.userinterfacefragment.UserInterfaceFragment"/>
                     </vbox>
                 </tab>
+                <tab id="specificTab" label="Specific">
+                    <vbox id="specificTabContent"
+                          width="100%" height="100%"
+                          expand="specificFragment">
+                        <fragment id="specificFragment"
+                                  class="com.vn.rm.rolemanage.specificfragment.SpecificFragment"/>
+                    </vbox>
+                </tab>
                 <tab id="childRolesTab"
                      label="Base roles">
                     <vbox id="childRolesWrapper" padding="false" height="100%">
@@ -98,6 +108,7 @@
                         </dataGrid>
                     </vbox>
                 </tab>
+
             </tabSheet>
         </vbox>
 

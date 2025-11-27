@@ -11,117 +11,277 @@ import io.jmix.flowui.fragment.FragmentDescriptor;
 import io.jmix.flowui.menu.MenuItem;
 import io.jmix.flowui.model.CollectionContainer;
 import io.jmix.flowui.view.ViewComponent;
-import io.jmix.security.model.ResourcePolicyModel;
-import io.jmix.security.model.ResourceRoleModel;
+import io.jmix.security.model.*;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.*;
 
 @FragmentDescriptor("user-interface-fragment.xml")
 public class UserInterfaceFragment extends Fragment<VerticalLayout> {
-
-
     @ViewComponent private CollectionContainer<PolicyGroupNode> policyTreeDc;
     @ViewComponent private TreeDataGrid<PolicyGroupNode> policyTreeGrid;
     @ViewComponent private Checkbox allowAllViews;
 
-    private boolean suppressAllowAllEvent = false;
-    private final Map<String, List<PolicyGroupNode>> leafIndex = new HashMap<>();
     @Autowired
     private RoleManagerService roleManagerService;
-    // =====================================================================
-    // INIT
-    // =====================================================================
+
+    private boolean suppressAllowAllEvent = false;
+
+
+
+    // ========================================================================
+    // INIT UI – FIX CHUẨN NHẤT
+    // ========================================================================
     public void initUi(ResourceRoleModel model) {
 
+        boolean isAnnotated = model.getSource() == RoleSourceType.ANNOTATED_CLASS;
+
+        // 1) Load annotated role nếu có
+        if (isAnnotated) {
+            ResourceRole runtimeRole = roleManagerService.getRoleByCode(model.getCode());
+            ResourceRoleModel annotatedModel =
+                    roleManagerService.convertAnnotatedToModel(runtimeRole);
+            roleManagerService.setAnnotatedRole(annotatedModel);
+        } else {
+            roleManagerService.setAnnotatedRole(null);
+        }
+
+        // 2) Nếu annotated → disable AllowAll (disable nhưng vẫn hiển thị trạng thái)
+        allowAllViews.setEnabled(!isAnnotated);
+
+        // 3) Build UI tree
         buildTree(model);
+
+        // 4) Setup TreeGrid
         setupTreeGrid(model.getSource().name());
 
+        // 5) Check AllowAll từ DB policies
         boolean hasAllowAll = model.getResourcePolicies().stream()
-                .anyMatch(p -> "*".equals(p.getResource()) &&
-                        "ALLOW".equalsIgnoreCase(p.getEffect()));
+                .anyMatch(p -> "*".equals(p.getResource())
+                        && ResourcePolicyEffect.ALLOW.equals(p.getEffect()));
 
         suppressAllowAllEvent = true;
-        allowAllViews.setValue(hasAllowAll);
+        allowAllViews.setValue(hasAllowAll);  // vẫn set được vì enabled/disabled ok
         suppressAllowAllEvent = false;
 
+        // 6) Listener xử lý tick AllowAll
         allowAllViews.addValueChangeListener(e -> {
-            if (suppressAllowAllEvent) return;
-            if (!e.isFromClient()) return;
+            if (!e.isFromClient() || suppressAllowAllEvent)
+                return;
+
             applyAllowAll(Boolean.TRUE.equals(e.getValue()));
         });
     }
 
-    public boolean isAllowAllViewsChecked() {
+    private boolean isAllowAllViewsChecked() {
         return Boolean.TRUE.equals(allowAllViews.getValue());
     }
+    // ========================================================================
+// APPLY ALLOW ALL (KHÔI PHỤC HÀM BỊ MẤT)
+// ========================================================================
+    private void applyAllowAll(boolean enable) {
 
-    // =====================================================================
-    // BUILD TREE
-    // =====================================================================
+        for (PolicyGroupNode leaf : roleManagerService.getAllIndexedLeaves()) {
+
+            if (enable) {
+                // ALLOW ALL → tick allow hết
+                leaf.setEffect("ALLOW");
+                leaf.setAllow(true);
+                leaf.setDeny(false);
+
+            } else {
+                // BỎ ALLOW ALL → tất cả thành DENY (UI), không lưu DB
+                leaf.setEffect("DENY");
+                leaf.setAllow(false);
+                leaf.setDeny(true);
+            }
+        }
+
+        policyTreeGrid.getDataProvider().refreshAll();
+    }
+
+
+
+
+
+    // ========================================================================
+    // BUILD TREE – (KEEP CODE NHƯ CŨ)
+    // ========================================================================
+
     private void buildTree(ResourceRoleModel model) {
 
-        Map<String, List<MenuItem>> viewMenuMap = roleManagerService.buildViewMenuMap();
+        Map<String, List<MenuItem>> vmMap = roleManagerService.buildViewMenuMap();
 
         PolicyGroupNode viewRoot = new PolicyGroupNode("View Access", true);
         PolicyGroupNode menuRoot = new PolicyGroupNode("Menu Access", true);
 
-        roleManagerService.buildViewsTree(viewRoot, viewMenuMap);
+        roleManagerService.buildViewsTree(viewRoot, vmMap);
         viewRoot = roleManagerService.compress(viewRoot);
 
         roleManagerService.buildMenuTree(menuRoot);
 
-        leafIndex.clear();
-        roleManagerService.indexLeaves(menuRoot);
+        roleManagerService.clearIndex();
         roleManagerService.indexLeaves(viewRoot);
+        roleManagerService.indexLeaves(menuRoot);
 
-        Set<PolicyGroupNode> initialized = new HashSet<>();
-        for (List<PolicyGroupNode> nodes : leafIndex.values()) {
-            for (PolicyGroupNode node : nodes) {
-                if (initialized.add(node)) {
-                    node.resetState();
-                }
-            }
-        }
+        for (PolicyGroupNode leaf : roleManagerService.getAllIndexedLeaves())
+            leaf.resetState();
 
-        // Apply ALLOW from DB only
-        for (ResourcePolicyModel p : model.getResourcePolicies()) {
+        // 1) apply annotated allow
+        applyAnnotated(model);
 
-            if (!"ALLOW".equalsIgnoreCase(p.getEffect()))
-                continue;
+        // 2) sync menu <-> view
+        autoAllowMenuByView();
 
-            String key = roleManagerService.buildLeafKey(p.getResource(), p.getAction());
-            List<PolicyGroupNode> nodes = key == null ? null : leafIndex.get(key);
-            if (nodes == null)
-                continue;
+        // 3) apply DB deny override
+        applyDbPolicies(model);
 
-            for (PolicyGroupNode n : nodes) {
-                roleManagerService.applyState(n, true);
-                n.setDenyDefault(false);
-            }
-        }
+        // final sync
+        autoAllowMenuByView();
 
         policyTreeDc.setItems(Arrays.asList(viewRoot, menuRoot));
         policyTreeGrid.setItems(Arrays.asList(viewRoot, menuRoot), PolicyGroupNode::getChildren);
     }
 
-    // =====================================================================
-    // RENDER COLUMNS
-    // =====================================================================
+
+
+    // ========================================================================
+    // APPLY ANNOTATED
+    // ========================================================================
+    private void applyAnnotated(ResourceRoleModel model) {
+
+        for (ResourcePolicyModel p : model.getResourcePolicies()) {
+
+            if (!ResourcePolicyEffect.ALLOW.equalsIgnoreCase(p.getEffect()))
+                continue;
+
+            // ================================================
+            // 1) Nếu annotated là "*" → ALLOW ALL SCREEN + MENU
+            // ================================================
+            if ("*".equals(p.getResource())) {
+
+                suppressAllowAllEvent = true;
+                allowAllViews.setValue(true);
+                suppressAllowAllEvent = false;
+
+                applyAllowAll(true);
+                continue;
+            }
+
+            // ================================================
+            // 2) Các annotated khác (screen, menu, view)
+            // ================================================
+            String uiAction = mapAnnotatedActionToUiAction(p);
+            if (uiAction == null)
+                continue;
+
+            String key = roleManagerService.buildLeafKey(p.getResource(), "access");
+            List<PolicyGroupNode> nodes = roleManagerService.getNodesByKey(key);
+
+            if (nodes != null) {
+                for (PolicyGroupNode n : nodes) {
+                    n.setAnnotated(true);
+                    roleManagerService.applyState(n, true);
+                    n.setDenyDefault(false);
+                }
+            }
+        }
+    }
+    /**
+     * Convert annotated policy → UI policy action
+     */
+    /**
+     * Map annotated policy → UI type + action (screen/menu → view/menu)
+     */
+    private String mapAnnotatedActionToUiAction(ResourcePolicyModel p) {
+
+        String type = p.getType();
+
+        // screen, menu → access
+        if ("screen".equalsIgnoreCase(type)) {
+            return "access";
+        }
+        if ("menu".equalsIgnoreCase(type)) {
+            return "access";
+        }
+
+        // ignore entity / attribute / specific
+        return null;
+    }
+
+    // ========================================================================
+    // APPLY DB POLICIES – KEEP CODE CŨ
+    // ========================================================================
+    private void applyDbPolicies(ResourceRoleModel model) {
+
+        for (ResourcePolicyModel p : model.getResourcePolicies()) {
+            if (ResourcePolicyEffect.ALLOW.equals(p.getEffect())) {
+
+                List<PolicyGroupNode> nodes = roleManagerService.getNodesByKey(
+                        roleManagerService.buildLeafKey(p.getResource(), p.getAction()));
+
+                if (nodes != null) {
+                    for (PolicyGroupNode n : nodes) {
+                        roleManagerService.applyState(n, true);
+                        n.setDenyDefault(false);
+                    }
+                }
+            }
+        }
+
+        for (ResourcePolicyModel p : model.getResourcePolicies()) {
+            if (ResourcePolicyEffect.DENY.equals(p.getEffect())) {
+
+                List<PolicyGroupNode> nodes = roleManagerService.getNodesByKey(
+                        roleManagerService.buildLeafKey(p.getResource(), p.getAction()));
+
+                if (nodes != null) {
+                    for (PolicyGroupNode n : nodes) {
+                        roleManagerService.applyState(n, false);
+                    }
+                }
+            }
+        }
+    }
+
+
+    // ========================================================================
+    // MENU SYNC (KEEP CODE CŨ)
+    // ========================================================================
+    private void autoAllowMenuByView() {
+        for (PolicyGroupNode leaf : roleManagerService.getAllIndexedLeaves()) {
+
+            if (!"VIEW".equals(leaf.getType()))
+                continue;
+
+            if (!"ALLOW".equals(leaf.getEffect()))
+                continue;
+
+            String key = leaf.getResource() + "|menu";
+
+            List<PolicyGroupNode> menus = roleManagerService.getNodesByKey(key);
+
+            if (menus != null) {
+                for (PolicyGroupNode node : menus) {
+                    roleManagerService.applyState(node, true);
+                    node.setDenyDefault(false);
+                }
+            }
+        }
+    }
+
+    // ================================================================
+    // GRID SETUP
+    // ================================================================
     private void setupTreeGrid(String source) {
         boolean editable = "DATABASE".equalsIgnoreCase(source);
 
         policyTreeGrid.removeAllColumns();
 
-        policyTreeGrid.addHierarchyColumn(node ->
-                        node.getMeta() != null
-                                ? node.getName() + "   " + node.getMeta()
-                                : node.getName())
+        policyTreeGrid.addHierarchyColumn(n ->
+                        n.getMeta() != null ? n.getName() + "  " + n.getMeta() : n.getName())
                 .setHeader("Resource")
-                .setFlexGrow(6)
-                .setAutoWidth(true)
-                .setResizable(true)
-                .setTextAlign(ColumnTextAlign.START);
+                .setFlexGrow(4);
 
         policyTreeGrid.addColumn(PolicyGroupNode::getType)
                 .setHeader("Type")
@@ -131,11 +291,12 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
                 .setHeader("Action")
                 .setTextAlign(ColumnTextAlign.CENTER);
 
-        // ALLOW checkbox
+        // Allow
         policyTreeGrid.addColumn(new ComponentRenderer<>(Checkbox::new, (cb, node) -> {
             cb.setVisible(node.isLeaf());
             cb.setEnabled(editable);
 
+            // ALLOW là khi effect = ALLOW
             cb.setValue("ALLOW".equals(node.getEffect()));
 
             cb.addValueChangeListener(e -> {
@@ -143,76 +304,81 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
 
                 boolean checked = Boolean.TRUE.equals(e.getValue());
 
-                roleManagerService.syncLinkedLeaves(node, checked);
+                if (checked) {
+                    // ✔ Tick Allow
+                    node.setEffect("ALLOW");
+                    node.setAllow(true);
+                    node.setDeny(false);
+                } else {
+                    // ❌ Bỏ allow → chuyển sang Deny UI
+                    node.setEffect(null);      // xoá allow DB
+                    node.setAllow(false);
+                    node.setDeny(true);        // đánh dấu UI Deny
+                }
+
                 policyTreeGrid.getDataProvider().refreshAll();
             });
 
         })).setHeader("Allow");
 
-        // DENY checkbox (UI only)
+
+        // Deny
         policyTreeGrid.addColumn(new ComponentRenderer<>(Checkbox::new, (cb, node) -> {
             cb.setVisible(node.isLeaf());
             cb.setEnabled(editable);
 
+            // Deny = effect != ALLOW (UI-only)
             cb.setValue(!"ALLOW".equals(node.getEffect()));
 
             cb.addValueChangeListener(e -> {
                 if (!e.isFromClient()) return;
 
                 boolean checked = Boolean.TRUE.equals(e.getValue());
+
                 if (checked) {
-                    roleManagerService.syncLinkedLeaves(node, false);
-                    policyTreeGrid.getDataProvider().refreshAll();
+                    // ✔ Tick Deny → xoá allow
+                    node.setEffect(null);    // xoá khỏi DB
+                    node.setAllow(false);
+                    node.setDeny(true);
+
+                    // ✔ bỏ tick Allow All nếu đang bật
+                    suppressAllowAllEvent = true;
+                    allowAllViews.setValue(false);
+                    suppressAllowAllEvent = false;
+
+                } else {
+                    // ❗ Bỏ deny → luôn bật Allow
+                    node.setEffect("ALLOW");
+                    node.setAllow(true);
+                    node.setDeny(false);
                 }
+
+                policyTreeGrid.getDataProvider().refreshAll();
             });
 
         })).setHeader("Deny");
 
-        policyTreeGrid.setColumnReorderingAllowed(true);
-    }
-
-    // =====================================================================
-    // APPLY ALLOW ALL
-    // =====================================================================
-    private void applyAllowAll(boolean enable) {
-
-        for (PolicyGroupNode root : policyTreeDc.getItems())
-            roleManagerService.applyForAll(root, enable);
-
-        policyTreeGrid.getDataProvider().refreshAll();
     }
 
 
-    // =====================================================================
-    // COLLECT POLICIES — only ALLOW saved
-    // =====================================================================
+    // ================================================================
+    // COLLECT POLICIES
+    // ================================================================
     public List<ResourcePolicyModel> collectPoliciesFromTree() {
 
-        List<ResourcePolicyModel> list = new ArrayList<>();
+        List<ResourcePolicyModel> result = new ArrayList<>();
 
         if (isAllowAllViewsChecked()) {
-            ResourcePolicyModel p = new ResourcePolicyModel();
-            p.setId(UUID.randomUUID());
-            p.setType("VIEW");
-            p.setResource("*");
-            p.setAction("view");
-            p.setEffect("ALLOW");
-            list.add(p);
+            result.add(roleManagerService.createPolicy("screen", "*", "access"));
+            result.add(roleManagerService.createPolicy("menu", "*", "access"));
 
-            ResourcePolicyModel menu = new ResourcePolicyModel();
-            menu.setId(UUID.randomUUID());
-            menu.setType("MENU");
-            menu.setResource("*");
-            menu.setAction("menu");
-            menu.setEffect("ALLOW");
-            list.add(menu);
-
-            return list;
+            return result;
         }
 
-        for (PolicyGroupNode root : policyTreeDc.getItems())
-            roleManagerService.collect(root, list);
 
-        return list;
+        for (PolicyGroupNode root : policyTreeDc.getItems())
+            roleManagerService.collect(root, result);
+
+        return result;
     }
 }
