@@ -3,6 +3,7 @@ package com.vn.rm.rolemanage;
 import com.google.common.base.Strings;
 import com.vaadin.flow.router.Route;
 import com.vn.rm.rolemanage.entityfragment.EntitiesFragment;
+import com.vn.rm.rolemanage.specificfragment.SpecificFragment;
 import com.vn.rm.rolemanage.userinterfacefragment.UserInterfaceFragment;
 import io.jmix.core.DataManager;
 import io.jmix.core.Metadata;
@@ -59,7 +60,8 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
 
     @ViewComponent
     private UserInterfaceFragment userInterfaceFragment;
-
+    @ViewComponent
+    private SpecificFragment specificFragment;
     // Tab Base roles
     @ViewComponent
     private DataGrid<ResourceRoleModel> childRolesTable;
@@ -160,7 +162,9 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         if (userInterfaceFragment != null) {
             userInterfaceFragment.initUi(model);
         }
-
+        if (specificFragment != null) {
+            specificFragment.initSpecific(model);
+        }
         // Loại bỏ các policy DENY (nếu bạn muốn dùng cách này)
         resourcePoliciesDc.getMutableItems()
                 .removeIf(p -> "DENY".equalsIgnoreCase(p.getEffect()));
@@ -324,7 +328,9 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         if (userInterfaceFragment != null) {
             all.addAll(userInterfaceFragment.collectPoliciesFromTree());
         }
-
+        if (specificFragment != null) {
+            all.addAll(specificFragment.collectSpecificPolicies());
+        }
         // --- Làm sạch duplicates (nếu fragment trả cùng policy)
         Map<String, ResourcePolicyModel> cleaned = new LinkedHashMap<>();
         for (ResourcePolicyModel p : all) {

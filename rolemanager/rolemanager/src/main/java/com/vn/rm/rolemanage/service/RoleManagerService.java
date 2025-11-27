@@ -8,9 +8,8 @@ import io.jmix.flowui.fragment.FragmentDescriptor;
 import io.jmix.flowui.menu.MenuConfig;
 import io.jmix.flowui.menu.MenuItem;
 import io.jmix.flowui.view.ViewRegistry;
-import io.jmix.security.model.ResourcePolicyEffect;
-import io.jmix.security.model.ResourcePolicyModel;
-import io.jmix.security.model.ResourcePolicyType;
+import io.jmix.security.model.*;
+import io.jmix.security.role.ResourceRoleRepository;
 import io.jmix.securityflowui.view.resourcepolicy.AttributeResourceModel;
 import io.jmix.securityflowui.view.resourcepolicy.EntityAttributePolicyAction;
 import io.jmix.securityflowui.view.resourcepolicy.EntityPolicyAction;
@@ -39,7 +38,20 @@ public class RoleManagerService {
     @Autowired private ViewRegistry viewRegistry;
     @Autowired private MenuConfig menuConfig;
     @Autowired private ApplicationContext applicationContext;
+    @Autowired
+    private ResourceRoleRepository resourceRoleRepository;
 
+    private ResourceRoleModel annotatedRole;
+
+    public void setAnnotatedRole(ResourceRoleModel role) {
+        this.annotatedRole = role;
+    }
+
+
+
+    public ResourceRole getRoleByCode(String code) {
+        return resourceRoleRepository.findRoleByCode(code);
+    }
 
 
     private Map<String, List<PolicyGroupNode>> leafIndex = new HashMap<>();
@@ -328,8 +340,9 @@ public class RoleManagerService {
     }
 
     // --- Helpers ---
+    // --- Helpers ---
 
-    private ResourcePolicyModel createPolicy(String type, String resource, String action) {
+    public ResourcePolicyModel createPolicy(String type, String resource, String action) {
         ResourcePolicyModel p = metadata.create(ResourcePolicyModel.class);
         p.setType(type);
         p.setResource(resource);
@@ -362,8 +375,10 @@ public class RoleManagerService {
     public String buildLeafKey(String resource, String action) {
         if (resource == null || action == null)
             return null;
-        return resource + "|" + action;
+
+        return resource + "|" + action.toLowerCase();
     }
+
     /**
      * Nén cây: gộp các folder 1-1 nếu không có leaf bên trong.
      */
@@ -523,41 +538,64 @@ public class RoleManagerService {
     /**
      * Thêm leaf VIEW hoặc MENU vào cây, tùy thuộc view có trong menu hay không.
      */
+    /**
+     * Thêm leaf VIEW hoặc MENU vào cây, tùy thuộc view có trong menu hay không.
+     */
     private void addLeaf(PolicyGroupNode parent, String viewId, String meta, List<MenuItem> menuItems) {
 
+        boolean isAnnotated = isAnnotatedView(viewId);
+
+        // -------------------------------------------------------
+        // CASE 1: View nằm trong menu → tạo cả MENU leaf + VIEW leaf
+        // -------------------------------------------------------
         if (menuItems != null && !menuItems.isEmpty()) {
 
             boolean singleMenu = menuItems.size() == 1;
+
             for (MenuItem menuItem : menuItems) {
-                String caption = singleMenu ? "Allow in menu" : "Allow in menu (" + menuItem.getId() + ")";
+
+                String caption = singleMenu
+                        ? "Allow in menu"
+                        : "Allow in menu (" + menuItem.getId() + ")";
 
                 PolicyGroupNode allowMenu = new PolicyGroupNode(caption, false);
-                allowMenu.setType("MENU");
+                allowMenu.setType("menu");              // MENU leaf
                 allowMenu.setResource(menuItem.getId());
-                allowMenu.setAction("menu");
+                allowMenu.setAction("access");          // ✔ FIX: menu → access
+                allowMenu.setAnnotated(isAnnotated);
                 allowMenu.setParent(parent);
+
                 parent.getChildren().add(allowMenu);
             }
 
+            // VIEW leaf
             PolicyGroupNode allowView = new PolicyGroupNode("View: " + viewId, false);
-            allowView.setType("VIEW");
+            allowView.setType("screen");                // ✔ FIX: screen (để match với @ScreenPolicy)
             allowView.setResource(viewId);
-            allowView.setAction("view");
+            allowView.setAction("access");              // ✔ FIX: screen → access
             allowView.setMeta(meta);
+            allowView.setAnnotated(isAnnotated);
             allowView.setParent(parent);
+
             parent.getChildren().add(allowView);
-
-        } else {
-
-            PolicyGroupNode leaf = new PolicyGroupNode(viewId, false);
-            leaf.setType("VIEW");
-            leaf.setResource(viewId);
-            leaf.setAction("view");
-            leaf.setMeta(meta);
-            leaf.setParent(parent);
-            parent.getChildren().add(leaf);
+            return;
         }
+
+        // -------------------------------------------------------
+        // CASE 2: View KHÔNG nằm trong menu → chỉ tạo SCREEN leaf
+        // -------------------------------------------------------
+        PolicyGroupNode leaf = new PolicyGroupNode(viewId, false);
+        leaf.setType("screen");                         // ✔ FIX: screen
+        leaf.setResource(viewId);
+        leaf.setAction("access");                       // ✔ FIX: access
+        leaf.setMeta(meta);
+        leaf.setAnnotated(isAnnotated);
+        leaf.setParent(parent);
+
+        parent.getChildren().add(leaf);
     }
+
+
     /**
      * Tạo đầy đủ folder menu hierarchy từ một MenuItem.
      */
@@ -650,59 +688,66 @@ public class RoleManagerService {
         String caption = item.getView() != null ? item.getView() : item.getId();
 
         PolicyGroupNode groupNode = new PolicyGroupNode(caption, true);
-        groupNode.setType("MENU");
+        groupNode.setType("menu");           // ✔ MENU group dùng type=menu
         groupNode.setParent(parentNode);
         parentNode.getChildren().add(groupNode);
 
         boolean hasView = item.getView() != null;
         boolean hasChildren = !item.getChildren().isEmpty();
 
+        // ----------------------------------------------------
+        // CASE 1: Menu item có view → tạo 2 leaf:
+        //    - MENU leaf (menu, access)
+        //    - VIEW leaf (screen, access)
+        // ----------------------------------------------------
         if (hasView) {
+
+            // MENU leaf
             PolicyGroupNode allowMenu = new PolicyGroupNode("Allow in menu", false);
-            allowMenu.setType("MENU");
+            allowMenu.setType("menu");              // ✔ menu
             allowMenu.setResource(item.getId());
-            allowMenu.setAction("menu");
+            allowMenu.setAction("access");          // ✔ MUST BE access
             allowMenu.setParent(groupNode);
             groupNode.getChildren().add(allowMenu);
 
+            // VIEW leaf
             PolicyGroupNode allowView = new PolicyGroupNode("View: " + item.getView(), false);
-            allowView.setType("VIEW");
+            allowView.setType("screen");            // ✔ screen
             allowView.setResource(item.getView());
-            allowView.setAction("view");
+            allowView.setAction("access");          // ✔ access
             allowView.setParent(groupNode);
             groupNode.getChildren().add(allowView);
         }
 
+        // ----------------------------------------------------
+        // CASE 2: có con menu → đệ quy tiếp
+        // ----------------------------------------------------
         if (hasChildren) {
             for (MenuItem c : item.getChildren())
                 addMenuNode(groupNode, c);
             return;
         }
 
+        // ----------------------------------------------------
+        // CASE 3: Menu KHÔNG có view và không có children
+        // → tạo leaf menu thuần (menu, access)
+        // ----------------------------------------------------
         if (!hasView && !hasChildren) {
             PolicyGroupNode leaf = new PolicyGroupNode(caption, false);
-            leaf.setType("MENU");
+            leaf.setType("menu");                  // ✔ menu
             leaf.setResource(item.getId());
-            leaf.setAction("menu");
+            leaf.setAction("access");              // ✔ access
             leaf.setParent(groupNode);
             groupNode.getChildren().add(leaf);
         }
     }
 
+
     /**
      * Đặt allow/deny cho toàn bộ leaf trong cây.
      */
 
-    public void applyForAll(PolicyGroupNode node, boolean enable) {
 
-        if (node.isLeaf()) {
-
-            applyState(node, enable);
-        }
-
-        for (PolicyGroupNode c : node.getChildren())
-            applyForAll(c, enable);
-    }
 
     /**
      * Thu thập tất cả leaf đang ALLOW để lưu thành ResourcePolicyModel.
@@ -729,6 +774,7 @@ public class RoleManagerService {
      * Đồng bộ allow/deny cho tất cả leaf có cùng resource + action.
      */
     public void syncLinkedLeaves(PolicyGroupNode node, boolean allow) {
+
         String key = buildLeafKey(node);
         if (key == null) {
             applyState(node, allow);
@@ -741,17 +787,27 @@ public class RoleManagerService {
             return;
         }
 
-        for (PolicyGroupNode target : linked)
+        for (PolicyGroupNode target : linked) {
             applyState(target, allow);
+        }
     }
 
     /**
      * Cập nhật trạng thái allow/deny cho một leaf.
      */
     public void applyState(PolicyGroupNode node, boolean allow) {
-        node.setEffect(allow ? "ALLOW" : null);
-        node.setAllow(allow);
-        node.setDeny(!allow);
+
+        if (allow) {
+            // ALLOW → lưu DB
+            node.setEffect("ALLOW");
+            node.setAllow(true);
+            node.setDeny(false);
+        } else {
+            // DENY → chỉ hiển thị UI, không lưu DB
+            node.setEffect(null);   // ❗ không gán "DENY"
+            node.setAllow(false);
+            node.setDeny(true);     // ❗ UI tick deny
+        }
     }
 
     /**
@@ -776,6 +832,67 @@ public class RoleManagerService {
         for (MenuItem child : item.getChildren()) {
             collectMenuItems(child, map);
         }
+    }
+    public void clearIndex() {
+        leafIndex.clear();
+    }
+    public Map<String, List<PolicyGroupNode>> getLeafIndex() {
+        return leafIndex;
+    }
+    public Collection<PolicyGroupNode> getAllIndexedLeaves() {
+        List<PolicyGroupNode> result = new ArrayList<>();
+        for (List<PolicyGroupNode> list : leafIndex.values()) {
+            result.addAll(list);
+        }
+        return result;
+    }
+
+
+    public List<PolicyGroupNode> getNodesByKey(String key) {
+        if (key == null) return null;
+        return leafIndex.get(key);
+    }
+    private boolean isAnnotatedView(String viewId) {
+
+        if (annotatedRole == null)
+            return false;
+
+        return annotatedRole.getResourcePolicies().stream()
+                .anyMatch(p ->
+                        ResourcePolicyEffect.ALLOW.equals(p.getEffect())
+                                && "screen".equalsIgnoreCase(p.getType())
+                                && ("*".equals(p.getResource()) || p.getResource().equals(viewId))
+                );
+    }
+
+    public ResourceRoleModel convertAnnotatedToModel(ResourceRole runtimeRole) {
+
+        if (runtimeRole == null)
+            return null;
+
+        ResourceRoleModel model = new ResourceRoleModel();
+        model.setCode(runtimeRole.getCode());
+        model.setName(runtimeRole.getName());
+        model.setDescription(runtimeRole.getDescription());
+        model.setSource(RoleSourceType.ANNOTATED_CLASS);
+        model.setScopes(runtimeRole.getScopes());
+
+        // Copy policies
+        List<ResourcePolicyModel> policies = runtimeRole.getResourcePolicies().stream()
+                .map(p -> {
+                    ResourcePolicyModel m = new ResourcePolicyModel();
+                    m.setType(p.getType());
+                    m.setResource(p.getResource());
+                    m.setAction(p.getAction());
+                    m.setEffect(p.getEffect());
+                    m.setPolicyGroup(p.getPolicyGroup());
+                    return m;
+                })
+                .collect(Collectors.toList());
+
+        model.setResourcePolicies(policies);
+
+        return model;
     }
 
 }
