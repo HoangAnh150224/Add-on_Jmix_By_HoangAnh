@@ -4,6 +4,7 @@ import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vn.rm.rolemanage.service.RoleManagerService;
+import io.jmix.core.accesscontext.SpecificOperationAccessContext;
 import io.jmix.core.security.SpecificPolicyInfoRegistry;
 import io.jmix.core.security.SpecificPolicyInfoRegistry.SpecificPolicyInfo;
 import io.jmix.flowui.component.grid.TreeDataGrid;
@@ -15,6 +16,10 @@ import io.jmix.flowui.view.Target;
 import io.jmix.flowui.view.ViewComponent;
 import io.jmix.security.model.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.core.type.classreading.CachingMetadataReaderFactory;
+import org.springframework.core.type.classreading.MetadataReader;
 
 import java.util.*;
 
@@ -106,15 +111,57 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
         specificTree.getDataProvider().refreshAll();
     }
 
+    private Map<String, String> scanSpecificClasses() {
+
+        Map<String, String> map = new HashMap<>();
+
+        try {
+            PathMatchingResourcePatternResolver resolver =
+                    new PathMatchingResourcePatternResolver();
+
+            Resource[] resources = resolver.getResources("classpath*:io/jmix/**/*.class");
+
+            CachingMetadataReaderFactory factory = new CachingMetadataReaderFactory();
+
+            for (Resource r : resources) {
+                MetadataReader reader = factory.getMetadataReader(r);
+
+                String className = reader.getClassMetadata().getClassName();
+                Class<?> cls;
+
+                try {
+                    cls = Class.forName(className);
+                } catch (Throwable e) {
+                    continue;
+                }
+
+                if (SpecificOperationAccessContext.class.isAssignableFrom(cls)
+                        && !cls.equals(SpecificOperationAccessContext.class)) {
+
+                    // lấy static final NAME
+                    try {
+                        String policyId = (String) cls.getField("NAME").get(null);
+                        map.put(policyId, className);
+                    } catch (Exception ignored) {}
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return map;
+    }
 
     // ======================================================================
     // BUILD TREE (ANNOTATED + DB)
     // ======================================================================
     private List<SpecificNode> buildTree(ResourceRoleModel model, ResourceRoleModel annotatedModel) {
 
-        // Annotated map (từ code)
+        Map<String, String> classMap = scanSpecificClasses();  // <policyId, className>
+
         Set<String> annotatedAllowed = new HashSet<>();
-        if (annotatedModel != null && annotatedModel.getResourcePolicies() != null) {
+        if (annotatedModel != null) {
             for (ResourcePolicyModel p : annotatedModel.getResourcePolicies()) {
                 if ("specific".equalsIgnoreCase(p.getType())
                         && ResourcePolicyEffect.ALLOW.equals(p.getEffect())) {
@@ -127,29 +174,32 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
 
         for (SpecificPolicyInfo info : registry.getSpecificPolicyInfos()) {
 
-            String id = info.getName();
-            String group = extractGroup(id);
+            String policyId = info.getName();
+            String className = classMap.get(policyId);
 
-            groups.computeIfAbsent(group, g -> new SpecificNode(g, true));
-            SpecificNode groupNode = groups.get(group);
+            if (className == null)
+                continue; // không có class → bỏ
 
-            SpecificNode leaf = new SpecificNode(id, false);
+            String groupId = extractGroupFromClass(className);
+            String leafId = policyId;
+
+            SpecificNode groupNode = groups.computeIfAbsent(
+                    groupId,
+                    k -> new SpecificNode(groupId, true)
+            );
+
+            SpecificNode leaf = new SpecificNode(leafId, false);
             leaf.setParent(groupNode);
             groupNode.getChildren().add(leaf);
 
-            // ============================================
-            // 1) Annotated (code) → ALWAYS ALLOW
-            // ============================================
-            if (annotatedAllowed.contains(id)) {
+            // annotated
+            if (annotatedAllowed.contains(policyId)) {
                 leaf.setAnnotated(true);
-                leaf.setEffect("ALLOW");
                 leaf.setAllow(true);
                 leaf.setDeny(false);
+                leaf.setEffect("ALLOW");
             }
 
-            // ============================================
-            // 2) DB override
-            // ============================================
             applyDbOverride(leaf, model);
         }
 
@@ -277,11 +327,25 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
     // ======================================================================
     // GROUP EXTRACT
     // ======================================================================
-    private String extractGroup(String id) {
-        String[] p = id.split("\\.");
-        if (p.length >= 2) return p[0] + "." + p[1];
-        return p[0];
+    private String extractGroupFromClass(String className) {
+        int idx = className.indexOf(".accesscontext.");
+        if (idx > 0) {
+            return className.substring(0, idx + ".accesscontext".length());
+        }
+        return className;
     }
+
+    private String extractLeaf(String id) {
+        if (id == null) return id;
+
+        int lastDot = id.lastIndexOf('.');
+        if (lastDot < 0) return id;
+
+        return id.substring(lastDot + 1);
+    }
+
+
+
 
 
     // ======================================================================
