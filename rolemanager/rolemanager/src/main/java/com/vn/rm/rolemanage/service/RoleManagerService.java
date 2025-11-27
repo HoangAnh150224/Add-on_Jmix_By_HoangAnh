@@ -40,8 +40,6 @@ public class RoleManagerService {
     @Autowired private MenuConfig menuConfig;
     @Autowired private ApplicationContext applicationContext;
 
-
-
     private Map<String, List<PolicyGroupNode>> leafIndex = new HashMap<>();
 
     private static final String ACT_CREATE = EntityPolicyAction.CREATE.getId();
@@ -108,6 +106,10 @@ public class RoleManagerService {
         // Global entity policies: "*"
         Set<String> globalActions = entityPolicyMap.getOrDefault("*", Collections.emptySet());
 
+        // ĐÃ SỬA: Lấy quyền Attribute Global (*.*) để merge vào
+        Map<String, Set<String>> globalAttrPolicy = attrPolicyMap.getOrDefault("*", Collections.emptyMap());
+        Set<String> globalAttrActions = globalAttrPolicy.getOrDefault("*", Collections.emptySet());
+
         for (EntityMatrixRow row : rows) {
             String entity = row.getEntityName();
             Set<String> actions = entityPolicyMap.getOrDefault(entity, Collections.emptySet());
@@ -122,7 +124,19 @@ public class RoleManagerService {
             syncAllowAll(row);
 
             // Attribute policies cho entity
-            Map<String, Set<String>> entityAttrs = attrPolicyMap.getOrDefault(entity, Collections.emptyMap());
+            // ĐÃ SỬA: Tạo map mới để merge quyền specific + quyền global
+            Map<String, Set<String>> entityAttrs = new HashMap<>(
+                    attrPolicyMap.getOrDefault(entity, Collections.emptyMap())
+            );
+
+            // Merge quyền *.* vào * của entity hiện tại (để hiển thị đúng)
+            if (!globalAttrActions.isEmpty()) {
+                entityAttrs.merge("*", globalAttrActions, (oldSet, newSet) -> {
+                    Set<String> merged = new HashSet<>(oldSet);
+                    merged.addAll(newSet);
+                    return merged;
+                });
+            }
 
             List<AttributeResourceModel> attrRows;
             if (!attrCache.containsKey(entity)) {
@@ -140,7 +154,6 @@ public class RoleManagerService {
 
     /**
      * Đồng bộ cờ allowAll = true nếu và chỉ nếu 4 CRUD đều true.
-     * Cho fragment gọi được nên để public.
      */
     public void syncAllowAll(EntityMatrixRow r) {
         boolean all = Boolean.TRUE.equals(r.getCanCreate())
@@ -256,6 +269,35 @@ public class RoleManagerService {
             result.add(createPolicy(ResourcePolicyType.ENTITY, "*", ACT_DELETE));
         }
 
+        // 1b. Attribute GLOBAL: nếu TẤT CẢ entity đều full view/modify → sinh *.* (view/modify)
+        boolean globalAttrView = false;
+        boolean globalAttrModify = false;
+
+        if (!activeRows.isEmpty()) {
+            globalAttrView = activeRows.stream().allMatch(r -> {
+                List<AttributeResourceModel> attrs =
+                        attrCache.getOrDefault(r.getEntityName(), Collections.emptyList());
+                return !attrs.isEmpty()
+                        && attrs.stream().allMatch(a -> Boolean.TRUE.equals(a.getView()));
+            });
+
+            globalAttrModify = activeRows.stream().allMatch(r -> {
+                List<AttributeResourceModel> attrs =
+                        attrCache.getOrDefault(r.getEntityName(), Collections.emptyList());
+                return !attrs.isEmpty()
+                        && attrs.stream().allMatch(a -> Boolean.TRUE.equals(a.getModify()));
+            });
+        }
+
+        if (globalAttrView) {
+            // *.* với action VIEW
+            result.add(createAttrPolicy("*", "*", ACT_ATTR_VIEW));
+        }
+        if (globalAttrModify) {
+            // *.* với action MODIFY
+            result.add(createAttrPolicy("*", "*", ACT_ATTR_MODIFY));
+        }
+
         // 2. Duyệt từng Entity Row
         for (EntityMatrixRow row : activeRows) {
             String entity = row.getEntityName();
@@ -284,20 +326,22 @@ public class RoleManagerService {
             boolean fullAttrView = attrs.stream().allMatch(a -> Boolean.TRUE.equals(a.getView()));
             boolean fullAttrModify = attrs.stream().allMatch(a -> Boolean.TRUE.equals(a.getModify()));
 
-            if (fullAttrView) {
+            // Nếu CHƯA có *.* view thì mới sinh entity.* view
+            if (!globalAttrView && fullAttrView) {
                 result.add(createAttrPolicy(entity, "*", ACT_ATTR_VIEW));
             }
-            if (fullAttrModify) {
+            // Nếu CHƯA có *.* modify thì mới sinh entity.* modify
+            if (!globalAttrModify && fullAttrModify) {
                 result.add(createAttrPolicy(entity, "*", ACT_ATTR_MODIFY));
             }
 
-            // Nếu không phải full (*), tạo lẻ từng attribute
+            // Nếu không full, sinh lẻ từng attr, nhưng cũng chỉ cho action chưa global
             if (!fullAttrView && !fullAttrModify) {
                 for (AttributeResourceModel attr : attrs) {
-                    if (Boolean.TRUE.equals(attr.getView())) {
+                    if (!globalAttrView && Boolean.TRUE.equals(attr.getView())) {
                         result.add(createAttrPolicy(entity, attr.getName(), ACT_ATTR_VIEW));
                     }
-                    if (Boolean.TRUE.equals(attr.getModify())) {
+                    if (!globalAttrModify && Boolean.TRUE.equals(attr.getModify())) {
                         result.add(createAttrPolicy(entity, attr.getName(), ACT_ATTR_MODIFY));
                     }
                 }
@@ -305,6 +349,7 @@ public class RoleManagerService {
         }
         return result;
     }
+
 
     /**
      * Cập nhật summary attributes cho 1 entity + sync lại cache.
