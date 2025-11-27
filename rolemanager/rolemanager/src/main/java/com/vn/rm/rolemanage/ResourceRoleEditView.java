@@ -7,7 +7,9 @@ import com.vn.rm.rolemanage.userinterfacefragment.UserInterfaceFragment;
 import io.jmix.core.DataManager;
 import io.jmix.core.Metadata;
 import io.jmix.core.SaveContext;
+import io.jmix.flowui.DialogWindows;
 import io.jmix.flowui.component.checkboxgroup.JmixCheckboxGroup;
+import io.jmix.flowui.component.grid.DataGrid;
 import io.jmix.flowui.kit.action.Action;
 import io.jmix.flowui.kit.action.ActionPerformedEvent;
 import io.jmix.flowui.model.CollectionContainer;
@@ -19,9 +21,11 @@ import io.jmix.security.model.*;
 import io.jmix.security.role.ResourceRoleRepository;
 import io.jmix.securitydata.entity.ResourcePolicyEntity;
 import io.jmix.securitydata.entity.ResourceRoleEntity;
+import io.jmix.securityflowui.view.resourcerole.ResourceRoleModelLookupView;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Route(value = "sec/resource-role-edit-view/:code", layout = DefaultMainViewParent.class)
 @ViewController("rm_ResourceRoleEditView")
@@ -56,6 +60,13 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
     @ViewComponent
     private UserInterfaceFragment userInterfaceFragment;
 
+    // Tab Base roles
+    @ViewComponent
+    private DataGrid<ResourceRoleModel> childRolesTable;
+
+    @ViewComponent
+    private CollectionContainer<ResourceRoleModel> childRolesDc;
+
     // --- Inject Action Save để ẩn đi nếu là Read-only ---
     @ViewComponent("saveAction")
     private Action saveAction;
@@ -72,8 +83,34 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
     private Metadata metadata;
     @Autowired
     private DataManager dataManager;
+    @Autowired
+    private DialogWindows dialogWindows;
 
     // ============================== Lifecycle ================================
+
+    /**
+     * Add base role: mở màn lookup resource role giống màn gốc của hãng.
+     */
+    @Subscribe("childRolesTable.add")
+    public void onChildRolesTableAdd(ActionPerformedEvent event) {
+        DialogWindow<ResourceRoleModelLookupView> lookupDialog = dialogWindows.lookup(childRolesTable)
+                .withViewClass(ResourceRoleModelLookupView.class)
+                .build();
+
+        List<String> excludedRolesCodes = childRolesDc.getItems().stream()
+                .map(BaseRoleModel::getCode)
+                .collect(Collectors.toList());
+
+        // nếu đang edit role hiện tại (read-only) thì loại chính nó luôn
+        ResourceRoleModel edited = getEditedEntity();
+        if (edited != null && edited.getCode() != null) {
+            excludedRolesCodes.add(edited.getCode());
+        }
+
+        lookupDialog.getView().setExcludedRoles(excludedRolesCodes);
+
+        lookupDialog.open();
+    }
 
     @Subscribe
     public void onInitEntity(InitEntityEvent<ResourceRoleModel> event) {
@@ -81,6 +118,7 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
 
         model.setSource(RoleSourceType.DATABASE);
         model.setResourcePolicies(new ArrayList<>());
+        model.setChildRoles(new HashSet<>()); // không có base roles ban đầu
 
         // Mặc định cho phép sửa (với role tạo mới)
         setFormReadOnly(false);
@@ -109,7 +147,7 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
 
         // 1. Cấu hình Fragment (Entities & Attributes)
         if (entitiesFragment != null) {
-            entitiesFragment.setRoleReadOnly(isAnnotatedRole); // Truyền cờ xuống fragment
+            entitiesFragment.setRoleReadOnly(isAnnotatedRole);
 
             List<ResourcePolicyModel> policies =
                     Optional.ofNullable(model.getResourcePolicies())
@@ -122,6 +160,8 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         if (userInterfaceFragment != null) {
             userInterfaceFragment.initUi(model);
         }
+
+        // Loại bỏ các policy DENY (nếu bạn muốn dùng cách này)
         resourcePoliciesDc.getMutableItems()
                 .removeIf(p -> "DENY".equalsIgnoreCase(p.getEffect()));
 
@@ -131,10 +171,17 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
             if (saveAction != null) {
                 saveAction.setVisible(false); // Ẩn nút Save
             }
+            // Base roles cũng không cho sửa
+            if (childRolesTable != null) {
+                childRolesTable.getActions().forEach(a -> a.setEnabled(false));
+            }
         } else {
             setFormReadOnly(false);
             if (saveAction != null) {
                 saveAction.setVisible(true);
+            }
+            if (childRolesTable != null) {
+                childRolesTable.getActions().forEach(a -> a.setEnabled(true));
             }
         }
     }
@@ -194,11 +241,51 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
 
         ResourceRoleModel merged = dataContext.merge(model);
         roleModelDc.setItem(merged);
+
+        // policies
         resourcePoliciesDc.setItems(
                 Optional.ofNullable(merged.getResourcePolicies())
                         .map(ArrayList::new)
                         .orElseGet(ArrayList::new)
         );
+
+        // child roles (Base roles tab)
+        childRolesDc.mute();
+        childRolesDc.setItems(loadChildRoleModels(merged));
+        childRolesDc.unmute();
+    }
+
+    /**
+     * Từ Set<String> childRoles (code) → List<ResourceRoleModel> để hiển thị trong grid.
+     */
+    private List<ResourceRoleModel> loadChildRoleModels(ResourceRoleModel editedRoleModel) {
+        if (editedRoleModel.getChildRoles() == null || editedRoleModel.getChildRoles().isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<ResourceRoleModel> childRoleModels = new ArrayList<>();
+        for (String code : editedRoleModel.getChildRoles()) {
+            ResourceRole child = roleRepository.findRoleByCode(code);
+            if (child != null) {
+                childRoleModels.add(roleModelConverter.createResourceRoleModel(child));
+            } else {
+                // có thể log warning nếu muốn
+            }
+        }
+        return childRoleModels;
+    }
+
+    /**
+     * Mỗi khi childRolesDc thay đổi → cập nhật lại Set<String> childRoles của ResourceRoleModel.
+     */
+    @Subscribe(id = "childRolesDc", target = Target.DATA_CONTAINER)
+    public void onChildRolesDcCollectionChange(
+            CollectionContainer.CollectionChangeEvent<ResourceRoleModel> event) {
+
+        Set<String> childRoles = childRolesDc.getItems().stream()
+                .map(BaseRoleModel::getCode)
+                .collect(Collectors.toSet());
+
+        getEditedEntity().setChildRoles(childRoles);
     }
 
     // ============================== SAVE ==============================
@@ -258,6 +345,11 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         m.setScopes(roleEntity.getScopes() == null ? Set.of() : new HashSet<>(roleEntity.getScopes()));
         m.setSource(RoleSourceType.DATABASE);
 
+        // child roles từ entity → model
+        m.setChildRoles(roleEntity.getChildRoles() == null
+                ? new HashSet<>()
+                : new HashSet<>(roleEntity.getChildRoles()));
+
         List<ResourcePolicyModel> ps = new ArrayList<>();
         if (roleEntity.getResourcePolicies() != null) {
             for (ResourcePolicyEntity pe : roleEntity.getResourcePolicies()) {
@@ -290,6 +382,11 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         role.setName(model.getName());
         role.setDescription(model.getDescription());
         role.setScopes(model.getScopes() == null ? Set.of() : new HashSet<>(model.getScopes()));
+
+        // child roles từ model → entity
+        role.setChildRoles(model.getChildRoles() == null
+                ? new HashSet<>()
+                : new HashSet<>(model.getChildRoles()));
 
         Map<String, ResourcePolicyEntity> existing = new HashMap<>();
         if (role.getResourcePolicies() != null) {

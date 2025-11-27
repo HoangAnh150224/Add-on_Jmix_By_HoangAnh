@@ -69,6 +69,35 @@
                                   class="com.vn.rm.rolemanage.userinterfacefragment.UserInterfaceFragment"/>
                     </vbox>
                 </tab>
+                <tab id="childRolesTab"
+                     label="Base roles">
+                    <vbox id="childRolesWrapper" padding="false" height="100%">
+                        <hbox id="childRolesButtonsPanel" classNames="buttons-panel">
+                            <button action="childRolesTable.add"/>
+                            <button action="childRolesTable.remove"/>
+                        </hbox>
+
+                        <dataGrid id="childRolesTable"
+                                  dataContainer="childRolesDc"
+                                  selectionMode="MULTI"
+                                  columnReorderingAllowed="true"
+                                  width="100%">
+                            <actions>
+                                <action id="add" type="list_add"/>
+                                <action id="remove" type="list_remove">
+                                    <properties>
+                                        <property name="confirmation" value="false"/>
+                                    </properties>
+                                </action>
+                            </actions>
+                            <columns resizable="true">
+                                <column property="name" flexGrow="2"/>
+                                <column property="code"/>
+                                <column property="source"/>
+                            </columns>
+                        </dataGrid>
+                    </vbox>
+                </tab>
             </tabSheet>
         </vbox>
 

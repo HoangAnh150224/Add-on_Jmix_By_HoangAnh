@@ -38,6 +38,7 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
 
     @ViewComponent
     private CollectionContainer<AttributeResourceModel> attrMatrixDc;
+
     @ViewComponent
     private DataGrid<AttributeResourceModel> attrMatrixTable;
 
