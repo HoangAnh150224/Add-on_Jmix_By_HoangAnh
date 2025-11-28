@@ -1,5 +1,5 @@
 <view xmlns="http://jmix.io/schema/flowui/view"
-      title="">
+      title="Resource Role Editor">
 
     <data>
         <instance id="roleModelDc" class="io.jmix.security.model.ResourceRoleModel">
@@ -25,26 +25,33 @@
     </facets>
 
     <actions>
-        <action id="saveAction" type="detail_saveClose"/>
+        <action id="saveAction" icon="CHECK" text="Save" />
         <action id="closeAction" type="detail_close"/>
     </actions>
 
-    <!-- THAY ĐỔI QUAN TRỌNG: Thêm expand="tabsBox" vào layout chính -->
     <layout height="100%" expand="tabsBox">
 
-        <!-- Form nhập liệu ở trên -->
+        <!-- Form nhập liệu -->
         <vbox id="contentBox" width="100%" padding="false" spacing="false">
             <formLayout id="form" dataContainer="roleModelDc" width="100%">
-                <textField id="nameField" property="name" required="true" themeNames="small"/>
+
+                <!-- SỬA 2: Bỏ required="true" để Java tự bắt lỗi và hiển thị Notification -->
+                <textField id="nameField" property="name" themeNames="small"/>
+
                 <textField id="sourceField" property="source" readOnly="true" themeNames="small"/>
-                <textField id="codeField" property="code" readOnly="true" themeNames="small"/>
-                <checkboxGroup id="scopesField" property="scopes" required="true"
+
+                <!-- SỬA 3: QUAN TRỌNG - Bỏ readOnly="true" để nhập được khi tạo mới -->
+                <textField id="codeField" property="code" themeNames="small"/>
+
+                <!-- SỬA 4: Bỏ required="true" để Java validation xử lý -->
+                <checkboxGroup id="scopesField" property="scopes"
                                themeNames="small helper-above-field"/>
+
                 <textArea id="descriptionField" property="description" height="6em" themeNames="small"/>
             </formLayout>
         </vbox>
 
-        <!-- Khối chứa TabSheet: Sẽ chiếm toàn bộ chiều cao còn lại -->
+        <!-- Tabs -->
         <vbox id="tabsBox"
               width="100%"
               height="100%"
@@ -52,7 +59,6 @@
 
             <tabSheet id="permissionsTabs" width="100%" height="100%">
                 <tab id="entitiesTab" label="Entities &amp; Attributes">
-                    <!-- Fragment container phải full height và expand fragment -->
                     <vbox id="entitiesTabContent"
                           width="100%" height="100%"
                           expand="entitiesFragment"
@@ -79,8 +85,7 @@
                                   class="com.vn.rm.rolemanage.specificfragment.SpecificFragment"/>
                     </vbox>
                 </tab>
-                <tab id="childRolesTab"
-                     label="Base roles">
+                <tab id="childRolesTab" label="Base roles">
                     <vbox id="childRolesWrapper" padding="false" height="100%">
                         <hbox id="childRolesButtonsPanel" classNames="buttons-panel">
                             <button action="childRolesTable.add"/>
@@ -93,7 +98,8 @@
                                   columnReorderingAllowed="true"
                                   width="100%">
                             <actions>
-                                <action id="add" type="list_add"/>
+                                <!-- SỬA 5: Đổi type="list_add" thành icon="PLUS" để Java handle sự kiện mở Lookup -->
+                                <action id="add" icon="PLUS" text="Add"/>
                                 <action id="remove" type="list_remove">
                                     <properties>
                                         <property name="confirmation" value="false"/>
@@ -112,9 +118,9 @@
             </tabSheet>
         </vbox>
 
-        <!-- Actions Bar ở dưới cùng -->
+        <!-- Actions Bar -->
         <hbox id="detailActions" classNames="px-m py-s bg-contrast-5" width="100%">
-            <button id="saveAndCloseBtn" action="saveAction"/>
+            <button id="saveAndCloseBtn" action="saveAction" themeNames="primary"/>
             <button id="closeBtn" action="closeAction"/>
         </hbox>
     </layout>

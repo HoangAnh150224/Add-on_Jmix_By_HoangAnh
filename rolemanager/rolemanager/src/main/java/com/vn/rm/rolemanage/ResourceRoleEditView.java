@@ -1,6 +1,7 @@
 package com.vn.rm.rolemanage;
 
 import com.google.common.base.Strings;
+import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.router.Route;
 import com.vn.rm.rolemanage.entityfragment.EntitiesFragment;
 import com.vn.rm.rolemanage.specificfragment.SpecificFragment;
@@ -9,6 +10,7 @@ import io.jmix.core.DataManager;
 import io.jmix.core.FetchPlan;
 import io.jmix.core.Metadata;
 import io.jmix.flowui.DialogWindows;
+import io.jmix.flowui.Notifications; // Import Notifications
 import io.jmix.flowui.component.checkboxgroup.JmixCheckboxGroup;
 import io.jmix.flowui.component.grid.DataGrid;
 import io.jmix.flowui.kit.action.Action;
@@ -73,6 +75,10 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
     private DataManager dataManager;
     @Autowired
     private DialogWindows dialogWindows;
+
+    // --- (MỚI) Inject Notifications để thông báo lỗi ---
+    @Autowired
+    private Notifications notifications;
 
     @Subscribe("childRolesTable.add")
     public void onChildRolesTableAdd(ActionPerformedEvent event) {
@@ -214,11 +220,46 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         getEditedEntity().setChildRoles(childRoles);
     }
 
+    // ============================== SAVE ACTION (CÓ VALIDATION) ==============================
     @Subscribe("saveAction")
     public void onSaveAction(ActionPerformedEvent event) {
         ResourceRoleModel model = roleModelDc.getItem();
         if (model == null) return;
         if (RoleSourceType.ANNOTATED_CLASS.equals(model.getSource())) return;
+
+        // --- VALIDATION ---
+
+        // 1. Kiểm tra Code
+        if (Strings.isNullOrEmpty(model.getCode())) {
+            notifications.create("Lỗi: Code không được để trống")
+                    .withType(Notifications.Type.WARNING)
+                    // SỬA Ở ĐÂY: Dùng Notification.Position (của Vaadin) thay vì Notifications.Position
+                    .withPosition(Notification.Position.TOP_END)
+                    .show();
+            codeField.focus();
+            return;
+        }
+
+        // 2. Kiểm tra Name
+        if (Strings.isNullOrEmpty(model.getName())) {
+            notifications.create("Lỗi: Name không được để trống")
+                    .withType(Notifications.Type.WARNING)
+                    // SỬA Ở ĐÂY
+                    .withPosition(Notification.Position.TOP_END)
+                    .show();
+            nameField.focus();
+            return;
+        }
+
+        // 3. Kiểm tra Scopes
+        if (model.getScopes() == null || model.getScopes().isEmpty()) {
+            notifications.create("Lỗi: Phải chọn ít nhất một Scope (UI hoặc API)")
+                    .withType(Notifications.Type.WARNING)
+                    // SỬA Ở ĐÂY
+                    .withPosition(Notification.Position.TOP_END)
+                    .show();
+            return;
+        }
 
         List<ResourcePolicyModel> allPolicies = collectAllPoliciesFromFragments(model);
 
@@ -235,6 +276,7 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
 
         close(StandardOutcome.SAVE);
     }
+
 
     private List<ResourcePolicyModel> optimizeEntityPolicies(List<ResourcePolicyModel> inputPolicies) {
         Set<String> wildcardActions = new HashSet<>();
