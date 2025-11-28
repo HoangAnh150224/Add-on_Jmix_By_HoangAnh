@@ -181,27 +181,6 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
             return new ArrayList<>(fromService);
         });
 
-        EntityMatrixRow currentRow = entityMatrixDc.getItems().stream()
-                .filter(r -> Objects.equals(r.getEntityName(), entityName))
-                .findFirst()
-                .orElse(null);
-
-        boolean isEntityAllowed = currentRow != null && Boolean.TRUE.equals(currentRow.getAllowAll());
-
-        // Sync trạng thái nếu Entity được AllowAll
-        if (isEntityAllowed) {
-            boolean needSyncSummary = false;
-            for (AttributeResourceModel attr : rows) {
-                if (!Boolean.TRUE.equals(attr.getModify())) {
-                    attr.setModify(true);
-                    attr.setView(false);
-                    needSyncSummary = true;
-                }
-            }
-            if (needSyncSummary) {
-                updateEntityAttributesSummary(entityName);
-            }
-        }
 
         attrMatrixDc.setItems(new ArrayList<>(rows));
         updateAttrHeaderState(false);
@@ -314,7 +293,7 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
                         row.setCanUpdate(newVal);
                         row.setCanDelete(newVal);
 
-                        applyAllowAllToAttributes(row.getEntityName(), newVal);
+//                        applyAllowAllToAttributes(row.getEntityName(), newVal);
                         entityMatrixTable.getDataProvider().refreshItem(row);
                         updateHeaderAllowAllFromRows();
                     }));
