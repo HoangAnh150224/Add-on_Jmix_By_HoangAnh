@@ -8,11 +8,13 @@ import com.vn.rm.rolemanage.specificfragment.SpecificFragment;
 import com.vn.rm.rolemanage.userinterfacefragment.UserInterfaceFragment;
 import io.jmix.core.DataManager;
 import io.jmix.core.FetchPlan;
+import io.jmix.core.Messages;
 import io.jmix.core.Metadata;
 import io.jmix.flowui.DialogWindows;
 import io.jmix.flowui.Notifications; // Import Notifications
 import io.jmix.flowui.component.checkboxgroup.JmixCheckboxGroup;
 import io.jmix.flowui.component.grid.DataGrid;
+import io.jmix.flowui.exception.ValidationException;
 import io.jmix.flowui.kit.action.Action;
 import io.jmix.flowui.kit.action.ActionPerformedEvent;
 import io.jmix.flowui.model.CollectionContainer;
@@ -76,6 +78,9 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
     @Autowired
     private DialogWindows dialogWindows;
 
+    @Autowired
+    private Messages messages;
+
     // --- (MỚI) Inject Notifications để thông báo lỗi ---
     @Autowired
     private Notifications notifications;
@@ -126,6 +131,7 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         boolean isAnnotatedRole = RoleSourceType.ANNOTATED_CLASS.equals(model.getSource())
                 || "Annotated class".equals(model.getSource());
 
+        // ... (giữ nguyên phần khởi tạo fragment) ...
         if (entitiesFragment != null) {
             entitiesFragment.setRoleReadOnly(isAnnotatedRole);
             List<ResourcePolicyModel> policies = Optional.ofNullable(model.getResourcePolicies())
@@ -138,12 +144,21 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
 
         resourcePoliciesDc.getMutableItems().removeIf(p -> "DENY".equalsIgnoreCase(p.getEffect()));
 
+        // --- SỬA ĐỔI LOGIC Ở ĐÂY ---
         if (isAnnotatedRole) {
             setFormReadOnly(true);
             if (saveAction != null) saveAction.setVisible(false);
             if (childRolesTable != null) childRolesTable.getActions().forEach(a -> a.setEnabled(false));
         } else {
+            // 1. Trước tiên cho phép sửa tất cả (cho trường hợp tạo mới)
             setFormReadOnly(false);
+
+            // 2. Kiểm tra nếu Code đã có dữ liệu (tức là đang EDIT role cũ) thì khóa trường Code lại
+            // Khi tạo mới (InitEntity), model.getCode() sẽ là null hoặc rỗng.
+            if (!Strings.isNullOrEmpty(model.getCode())) {
+                codeField.setReadOnly(true);
+            }
+
             if (saveAction != null) saveAction.setVisible(true);
             if (childRolesTable != null) childRolesTable.getActions().forEach(a -> a.setEnabled(true));
         }
@@ -154,6 +169,23 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         nameField.setReadOnly(readOnly);
         descriptionField.setReadOnly(readOnly);
         scopesField.setReadOnly(readOnly);
+    }
+
+    @Install(to = "codeField", subject = "validator")
+    private void codeFieldValidator(String value) {
+        ResourceRoleModel editedEntity = getEditedEntity();
+        boolean exist = roleRepository.getAllRoles().stream()
+                .filter(resourceRole -> {
+                    if (resourceRole.getCustomProperties().isEmpty()) {
+                        return true;
+                    }
+                    return !resourceRole.getCustomProperties().get("databaseId")
+                            .equals(editedEntity.getCustomProperties().get("databaseId"));
+                })
+                .anyMatch(resourceRole -> resourceRole.getCode().equals(value));
+        if (exist) {
+            throw new ValidationException(messages.getMessage("io.jmix.securityflowui.view.resourcerole/uniqueCode"));
+        }
     }
 
     @Override
@@ -318,7 +350,11 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         return optimized;
     }
 
+    /**
+     * SỬA LỖI: Thêm saveContext.saving(entity) cho các policy con
+     */
     private void saveRoleUsingSaveContext(ResourceRoleModel model, List<ResourcePolicyModel> newPolicies) {
+        // 1. Load Role cha từ DB
         ResourceRoleEntity dbRoleEntity = dataManager.load(ResourceRoleEntity.class)
                 .query("select r from sec_ResourceRoleEntity r where r.code = :code")
                 .parameter("code", model.getCode())
@@ -330,6 +366,7 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
                     return r;
                 });
 
+        // Update thông tin Role
         dbRoleEntity.setName(model.getName());
         dbRoleEntity.setDescription(model.getDescription());
         dbRoleEntity.setScopes(model.getScopes());
@@ -337,6 +374,7 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
 
         io.jmix.core.SaveContext saveContext = new io.jmix.core.SaveContext();
 
+        // 2. Xử lý xóa cũ (Removing)
         List<ResourcePolicyEntity> oldPolicies = dbRoleEntity.getResourcePolicies();
         if (oldPolicies != null && !oldPolicies.isEmpty()) {
             saveContext.removing(new ArrayList<>(oldPolicies));
@@ -345,7 +383,7 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
             dbRoleEntity.setResourcePolicies(new ArrayList<>());
         }
 
-
+        // 3. Xử lý thêm mới (Saving)
         for (ResourcePolicyModel pm : newPolicies) {
             ResourcePolicyEntity entity = dataManager.create(ResourcePolicyEntity.class);
             entity.setRole(dbRoleEntity);
@@ -354,10 +392,19 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
             entity.setAction(pm.getAction());
             entity.setEffect(pm.getEffect());
             entity.setPolicyGroup(pm.getPolicyGroup());
+
+            // Thêm vào list của cha
             dbRoleEntity.getResourcePolicies().add(entity);
+
+            // --- QUAN TRỌNG: KHẮC PHỤC LỖI CASCADE PERSIST ---
+            // Phải báo cho SaveContext biết cần lưu cả thằng con này nữa
+            saveContext.saving(entity);
         }
 
+        // Lưu thằng cha
         saveContext.saving(dbRoleEntity);
+
+        // 4. Commit transaction
         dataManager.save(saveContext);
     }
 
