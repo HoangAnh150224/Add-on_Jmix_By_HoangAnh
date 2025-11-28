@@ -120,10 +120,6 @@ public class RoleManagerService {
         // Global entity policies: "*"
         Set<String> globalActions = entityPolicyMap.getOrDefault("*", Collections.emptySet());
 
-        // ĐÃ SỬA: Lấy quyền Attribute Global (*.*) để merge vào
-        Map<String, Set<String>> globalAttrPolicy = attrPolicyMap.getOrDefault("*", Collections.emptyMap());
-        Set<String> globalAttrActions = globalAttrPolicy.getOrDefault("*", Collections.emptySet());
-
         for (EntityMatrixRow row : rows) {
             String entity = row.getEntityName();
             Set<String> actions = entityPolicyMap.getOrDefault(entity, Collections.emptySet());
@@ -138,19 +134,7 @@ public class RoleManagerService {
             syncAllowAll(row);
 
             // Attribute policies cho entity
-            // ĐÃ SỬA: Tạo map mới để merge quyền specific + quyền global
-            Map<String, Set<String>> entityAttrs = new HashMap<>(
-                    attrPolicyMap.getOrDefault(entity, Collections.emptyMap())
-            );
-
-            // Merge quyền *.* vào * của entity hiện tại (để hiển thị đúng)
-            if (!globalAttrActions.isEmpty()) {
-                entityAttrs.merge("*", globalAttrActions, (oldSet, newSet) -> {
-                    Set<String> merged = new HashSet<>(oldSet);
-                    merged.addAll(newSet);
-                    return merged;
-                });
-            }
+            Map<String, Set<String>> entityAttrs = attrPolicyMap.getOrDefault(entity, Collections.emptyMap());
 
             List<AttributeResourceModel> attrRows;
             if (!attrCache.containsKey(entity)) {
@@ -284,35 +268,6 @@ public class RoleManagerService {
             result.add(createPolicy(ResourcePolicyType.ENTITY, "*", ACT_DELETE));
         }
 
-        // 1b. Attribute GLOBAL: nếu TẤT CẢ entity đều full view/modify → sinh *.* (view/modify)
-        boolean globalAttrView = false;
-        boolean globalAttrModify = false;
-
-        if (!activeRows.isEmpty()) {
-            globalAttrView = activeRows.stream().allMatch(r -> {
-                List<AttributeResourceModel> attrs =
-                        attrCache.getOrDefault(r.getEntityName(), Collections.emptyList());
-                return !attrs.isEmpty()
-                        && attrs.stream().allMatch(a -> Boolean.TRUE.equals(a.getView()));
-            });
-
-            globalAttrModify = activeRows.stream().allMatch(r -> {
-                List<AttributeResourceModel> attrs =
-                        attrCache.getOrDefault(r.getEntityName(), Collections.emptyList());
-                return !attrs.isEmpty()
-                        && attrs.stream().allMatch(a -> Boolean.TRUE.equals(a.getModify()));
-            });
-        }
-
-        if (globalAttrView) {
-            // *.* với action VIEW
-            result.add(createAttrPolicy("*", "*", ACT_ATTR_VIEW));
-        }
-        if (globalAttrModify) {
-            // *.* với action MODIFY
-            result.add(createAttrPolicy("*", "*", ACT_ATTR_MODIFY));
-        }
-
         // 2. Duyệt từng Entity Row
         for (EntityMatrixRow row : activeRows) {
             String entity = row.getEntityName();
@@ -341,22 +296,20 @@ public class RoleManagerService {
             boolean fullAttrView = attrs.stream().allMatch(a -> Boolean.TRUE.equals(a.getView()));
             boolean fullAttrModify = attrs.stream().allMatch(a -> Boolean.TRUE.equals(a.getModify()));
 
-            // Nếu CHƯA có *.* view thì mới sinh entity.* view
-            if (!globalAttrView && fullAttrView) {
+            if (fullAttrView) {
                 result.add(createAttrPolicy(entity, "*", ACT_ATTR_VIEW));
             }
-            // Nếu CHƯA có *.* modify thì mới sinh entity.* modify
-            if (!globalAttrModify && fullAttrModify) {
+            if (fullAttrModify) {
                 result.add(createAttrPolicy(entity, "*", ACT_ATTR_MODIFY));
             }
 
-            // Nếu không full, sinh lẻ từng attr, nhưng cũng chỉ cho action chưa global
+            // Nếu không phải full (*), tạo lẻ từng attribute
             if (!fullAttrView && !fullAttrModify) {
                 for (AttributeResourceModel attr : attrs) {
-                    if (!globalAttrView && Boolean.TRUE.equals(attr.getView())) {
+                    if (Boolean.TRUE.equals(attr.getView())) {
                         result.add(createAttrPolicy(entity, attr.getName(), ACT_ATTR_VIEW));
                     }
-                    if (!globalAttrModify && Boolean.TRUE.equals(attr.getModify())) {
+                    if (Boolean.TRUE.equals(attr.getModify())) {
                         result.add(createAttrPolicy(entity, attr.getName(), ACT_ATTR_MODIFY));
                     }
                 }
@@ -364,7 +317,6 @@ public class RoleManagerService {
         }
         return result;
     }
-
 
     /**
      * Cập nhật summary attributes cho 1 entity + sync lại cache.
@@ -387,6 +339,7 @@ public class RoleManagerService {
                 });
     }
 
+    // --- Helpers ---
     // --- Helpers ---
 
     public ResourcePolicyModel createPolicy(String type, String resource, String action) {
@@ -413,7 +366,7 @@ public class RoleManagerService {
     /**
      * Tạo key duy nhất cho leaf bằng resource + action.
      */
-    private String buildLeafKey(PolicyGroupNode node) {
+    public String buildLeafKey(PolicyGroupNode node) {
         return buildLeafKey(node.getResource(), node.getAction());
     }
     /**
@@ -585,12 +538,22 @@ public class RoleManagerService {
     /**
      * Thêm leaf VIEW hoặc MENU vào cây, tùy thuộc view có trong menu hay không.
      */
+    /**
+     * Thêm leaf VIEW hoặc MENU vào cây, tùy thuộc view có trong menu hay không.
+     */
+    /**
+     * Thêm leaf VIEW và MENU sao cho MENU dùng chung key với VIEW
+     */
+    /**
+     * Thêm leaf VIEW hoặc MENU vào cây, nhưng KEY phải là viewId
+     * để MENU ↔ VIEW sync được theo resource|access.
+     */
     private void addLeaf(PolicyGroupNode parent, String viewId, String meta, List<MenuItem> menuItems) {
 
         boolean isAnnotated = isAnnotatedView(viewId);
 
         // -------------------------------------------------------
-        // CASE 1: View nằm trong menu → tạo cả MENU leaf + VIEW leaf
+        // CASE 1: View NẰM TRONG MENU → tạo MENU leaf + VIEW leaf
         // -------------------------------------------------------
         if (menuItems != null && !menuItems.isEmpty()) {
 
@@ -603,9 +566,9 @@ public class RoleManagerService {
                         : "Allow in menu (" + menuItem.getId() + ")";
 
                 PolicyGroupNode allowMenu = new PolicyGroupNode(caption, false);
-                allowMenu.setType("menu");              // MENU leaf
-                allowMenu.setResource(menuItem.getId());
-                allowMenu.setAction("access");          // ✔ FIX: menu → access
+                allowMenu.setType("menu");
+                allowMenu.setResource(viewId);      // ✔ MUST USE VIEW ID (sync key)
+                allowMenu.setAction("access");
                 allowMenu.setAnnotated(isAnnotated);
                 allowMenu.setParent(parent);
 
@@ -614,9 +577,9 @@ public class RoleManagerService {
 
             // VIEW leaf
             PolicyGroupNode allowView = new PolicyGroupNode("View: " + viewId, false);
-            allowView.setType("screen");                // ✔ FIX: screen (để match với @ScreenPolicy)
-            allowView.setResource(viewId);
-            allowView.setAction("access");              // ✔ FIX: screen → access
+            allowView.setType("screen");
+            allowView.setResource(viewId);          // ✔ same key
+            allowView.setAction("access");
             allowView.setMeta(meta);
             allowView.setAnnotated(isAnnotated);
             allowView.setParent(parent);
@@ -626,12 +589,12 @@ public class RoleManagerService {
         }
 
         // -------------------------------------------------------
-        // CASE 2: View KHÔNG nằm trong menu → chỉ tạo SCREEN leaf
+        // CASE 2: View KHÔNG trong menu → chỉ VIEW leaf
         // -------------------------------------------------------
         PolicyGroupNode leaf = new PolicyGroupNode(viewId, false);
-        leaf.setType("screen");                         // ✔ FIX: screen
+        leaf.setType("screen");
         leaf.setResource(viewId);
-        leaf.setAction("access");                       // ✔ FIX: access
+        leaf.setAction("access");
         leaf.setMeta(meta);
         leaf.setAnnotated(isAnnotated);
         leaf.setParent(parent);
@@ -727,12 +690,16 @@ public class RoleManagerService {
      *  - nếu có child → xây tiếp
      *  - nếu không có gì → tạo leaf menu.
      */
+    /**
+     * Build cây Menu Access – nhưng MENU leaf phải dùng viewId để sync.
+     * Nếu item không có view → chỉ tạo leaf menu THƯỜNG (không sync được).
+     */
     private void addMenuNode(PolicyGroupNode parentNode, MenuItem item) {
 
         String caption = item.getView() != null ? item.getView() : item.getId();
 
         PolicyGroupNode groupNode = new PolicyGroupNode(caption, true);
-        groupNode.setType("menu");           // ✔ MENU group dùng type=menu
+        groupNode.setType("menu");
         groupNode.setParent(parentNode);
         parentNode.getChildren().add(groupNode);
 
@@ -740,31 +707,33 @@ public class RoleManagerService {
         boolean hasChildren = !item.getChildren().isEmpty();
 
         // ----------------------------------------------------
-        // CASE 1: Menu item có view → tạo 2 leaf:
-        //    - MENU leaf (menu, access)
-        //    - VIEW leaf (screen, access)
+        // CASE 1: Menu item có VIEW → tạo 2 leaf:
+        //   - MENU leaf (menu, access, resource=viewId)
+        //   - VIEW leaf (screen, access, resource=viewId)
         // ----------------------------------------------------
         if (hasView) {
 
+            String viewId = item.getView();
+
             // MENU leaf
             PolicyGroupNode allowMenu = new PolicyGroupNode("Allow in menu", false);
-            allowMenu.setType("menu");              // ✔ menu
-            allowMenu.setResource(item.getId());
-            allowMenu.setAction("access");          // ✔ MUST BE access
+            allowMenu.setType("menu");
+            allowMenu.setResource(viewId);     // ✔ MUST USE viewId
+            allowMenu.setAction("access");
             allowMenu.setParent(groupNode);
             groupNode.getChildren().add(allowMenu);
 
             // VIEW leaf
-            PolicyGroupNode allowView = new PolicyGroupNode("View: " + item.getView(), false);
-            allowView.setType("screen");            // ✔ screen
-            allowView.setResource(item.getView());
-            allowView.setAction("access");          // ✔ access
+            PolicyGroupNode allowView = new PolicyGroupNode("View: " + viewId, false);
+            allowView.setType("screen");
+            allowView.setResource(viewId);     // ✔ same key as menu
+            allowView.setAction("access");
             allowView.setParent(groupNode);
             groupNode.getChildren().add(allowView);
         }
 
         // ----------------------------------------------------
-        // CASE 2: có con menu → đệ quy tiếp
+        // CASE 2: Có children → build tiếp
         // ----------------------------------------------------
         if (hasChildren) {
             for (MenuItem c : item.getChildren())
@@ -772,18 +741,20 @@ public class RoleManagerService {
             return;
         }
 
-        // ----------------------------------------------------
-        // CASE 3: Menu KHÔNG có view và không có children
-        // → tạo leaf menu thuần (menu, access)
-        // ----------------------------------------------------
+
         if (!hasView && !hasChildren) {
             PolicyGroupNode leaf = new PolicyGroupNode(caption, false);
-            leaf.setType("menu");                  // ✔ menu
-            leaf.setResource(item.getId());
-            leaf.setAction("access");              // ✔ access
+            leaf.setType("menu");
+
+            // 🔥 FIX: Nếu menu có view → dùng viewId để sync VIEW <-> MENU
+            String res = item.getView() != null ? item.getView() : item.getId();
+            leaf.setResource(res);
+
+            leaf.setAction("access");
             leaf.setParent(groupNode);
             groupNode.getChildren().add(leaf);
         }
+
     }
 
 
@@ -813,11 +784,18 @@ public class RoleManagerService {
         for (PolicyGroupNode c : node.getChildren())
             collect(c, list);
     }
-
     /**
-     * Đồng bộ allow/deny cho tất cả leaf có cùng resource + action.
+     * MENU ↔ VIEW sync đúng logic
+     *
+     * - MENU tick Allow → ép VIEW Allow
+     * - MENU tick Deny → VIEW về trạng thái blank (không ép deny)
+     *
+     * - VIEW tick Allow/Deny → CHỈ sync VIEW ↔ VIEW (không sync MENU)
      */
     public void syncLinkedLeaves(PolicyGroupNode node, boolean allow) {
+
+        boolean isMenu = "menu".equalsIgnoreCase(node.getType());
+        boolean isView = "screen".equalsIgnoreCase(node.getType());
 
         String key = buildLeafKey(node);
         if (key == null) {
@@ -831,11 +809,81 @@ public class RoleManagerService {
             return;
         }
 
-        for (PolicyGroupNode target : linked) {
-            applyState(target, allow);
+        // ================================
+        // CASE 1: MENU — ALWAYS affects VIEW
+        // ================================
+        if (isMenu) {
+
+            for (PolicyGroupNode target : linked) {
+
+                if ("menu".equalsIgnoreCase(target.getType())) {
+                    // MENU ↔ MENU vẫn sync đầy đủ
+                    target.setEffect(allow ? "ALLOW" : null);
+                    target.setAllow(allow);
+                    target.setDeny(!allow);
+                }
+
+                if ("screen".equalsIgnoreCase(target.getType())) {
+
+                    if (allow) {
+                        // MENU = ALLOW → VIEW = ALLOW
+                        target.setEffect("ALLOW");
+                        target.setAllow(true);
+                        target.setDeny(false);
+
+                    } else {
+                        // MENU = DENY → KHÔNG ĐƯỢC TẮT VIEW
+                        // → GIỮ NGUYÊN TRẠNG THÁI VIEW
+                        // → KHÔNG SET ANYTHING
+                    }
+                }
+            }
+
+            applyState(node, allow);
+            return;
         }
+
+
+
+        // ================================
+        // CASE 2: VIEW — only sync VIEW ↔ VIEW
+        // ================================
+        if (isView) {
+
+            for (PolicyGroupNode target : linked) {
+                if ("screen".equalsIgnoreCase(target.getType())) {
+                    target.setEffect(allow ? "ALLOW" : null);
+                    target.setAllow(allow);
+                    target.setDeny(!allow);
+                }
+            }
+
+            applyState(node, allow);
+            return;
+        }
+
+        // fallback
+        applyState(node, allow);
     }
 
+
+    public boolean isViewLockedByMenu(PolicyGroupNode viewNode) {
+
+        if (!"screen".equalsIgnoreCase(viewNode.getType()))
+            return false;
+
+        String key = buildLeafKey(viewNode);
+        if (key == null) return false;
+
+        List<PolicyGroupNode> linked = getNodesByKey(key);
+        if (linked == null) return false;
+
+        // Nếu có 1 MENU đang ALLOW → khóa view
+        return linked.stream().anyMatch(n ->
+                "menu".equalsIgnoreCase(n.getType()) &&
+                        "ALLOW".equals(n.getEffect())
+        );
+    }
     /**
      * Cập nhật trạng thái allow/deny cho một leaf.
      */

@@ -20,7 +20,7 @@ public class PolicyGroupNode {
     private Boolean deny;
 
     private Boolean denyDefault = false;
-    private Boolean annotated = false;  // <-- BẠN XOÁ MẤT
+    private Boolean annotated = false;
 
     private PolicyGroupNode parent;
     private List<PolicyGroupNode> children = new ArrayList<>();
