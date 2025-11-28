@@ -34,7 +34,6 @@ import java.util.stream.Collectors;
 @EditedEntityContainer("roleModelDc")
 public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> {
 
-    // ============================= UI components (KHÔNG ĐỔI) =============================
     @ViewComponent
     private io.jmix.flowui.component.textfield.TypedTextField<String> codeField;
     @ViewComponent
@@ -62,8 +61,6 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
     @ViewComponent("saveAction")
     private Action saveAction;
 
-    // ================================ Services ===============================
-
     @Autowired
     private UrlParamSerializer urlParamSerializer;
     @Autowired
@@ -76,8 +73,6 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
     private DataManager dataManager;
     @Autowired
     private DialogWindows dialogWindows;
-
-    // ============================== Lifecycle ================================
 
     @Subscribe("childRolesTable.add")
     public void onChildRolesTableAdd(ActionPerformedEvent event) {
@@ -155,14 +150,13 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         scopesField.setReadOnly(readOnly);
     }
 
-    // ============================ Load entity ============================
-
     @Override
     protected void initExistingEntity(String serializedEntityCode) {
         String code = null;
         try {
             code = urlParamSerializer.deserialize(String.class, serializedEntityCode);
-        } catch (Exception ignore) {}
+        } catch (Exception ignore) {
+        }
 
         if (Strings.isNullOrEmpty(code)) {
             close(StandardOutcome.CLOSE);
@@ -220,12 +214,11 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         getEditedEntity().setChildRoles(childRoles);
     }
 
-
     @Subscribe("saveAction")
     public void onSaveAction(ActionPerformedEvent event) {
         ResourceRoleModel model = roleModelDc.getItem();
         if (model == null) return;
-      if (RoleSourceType.ANNOTATED_CLASS.equals(model.getSource())) return;
+        if (RoleSourceType.ANNOTATED_CLASS.equals(model.getSource())) return;
 
         List<ResourcePolicyModel> allPolicies = collectAllPoliciesFromFragments(model);
 
@@ -236,42 +229,31 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         }
         List<ResourcePolicyModel> distinctPolicies = new ArrayList<>(uniquePoliciesMap.values());
 
-        // 3. TỐI ƯU HÓA:
-        // - Logic: Nếu có All (*) -> Xóa các dòng con (User, Dept...).
-        // - Nếu bỏ chọn All -> Giữ nguyên danh sách (để lưu lại chi tiết).
         List<ResourcePolicyModel> finalPolicies = optimizeEntityPolicies(distinctPolicies);
 
-        // 4. THỰC HIỆN LƯU (Dùng SaveContext để xóa triệt để)
         saveRoleUsingSaveContext(model, finalPolicies);
 
         close(StandardOutcome.SAVE);
     }
 
-    /**
-     * FIX: So sánh action không phân biệt hoa thường (IgnoreCase) và cắt khoảng trắng (Trim).
-     */
     private List<ResourcePolicyModel> optimizeEntityPolicies(List<ResourcePolicyModel> inputPolicies) {
-        // B1: Tìm các Action đang có quyền "*" (All)
         Set<String> wildcardActions = new HashSet<>();
 
         for (ResourcePolicyModel p : inputPolicies) {
-            boolean isEntity = "entity".equalsIgnoreCase(p.getType()); // So sánh chuỗi an toàn
+            boolean isEntity = "entity".equalsIgnoreCase(p.getType());
             String resource = Objects.toString(p.getResource(), "").trim();
 
             if (isEntity && "*".equals(resource)) {
                 if (p.getAction() != null) {
-                    // Lưu action dưới dạng chữ thường để so sánh chuẩn
                     wildcardActions.add(p.getAction().trim().toLowerCase());
                 }
             }
         }
 
-        // Nếu không có quyền * nào thì trả về nguyên gốc (để lưu các dòng lẻ tẻ)
         if (wildcardActions.isEmpty()) {
             return inputPolicies;
         }
 
-        // B2: Lọc bỏ các dòng thừa
         List<ResourcePolicyModel> optimized = new ArrayList<>();
 
         for (ResourcePolicyModel p : inputPolicies) {
@@ -284,10 +266,6 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
                 boolean isWildcardRow = "*".equals(resource);
                 boolean hasWildcardForThisAction = wildcardActions.contains(currentAction);
 
-                // LOGIC QUAN TRỌNG:
-                // Nếu dòng này KHÔNG PHẢI là dòng "*" (ví dụ là dòng User, InfoValue...)
-                // VÀ hành động này đã có dòng "*" bao trùm rồi
-                // -> THÌ BỎ QUA (XÓA), KHÔNG LƯU NỮA.
                 if (!isWildcardRow && hasWildcardForThisAction) {
                     continue;
                 }
@@ -297,12 +275,8 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
 
         return optimized;
     }
-    /**
-     * Hàm này thực hiện logic: XÓA HẾT DB CŨ -> LƯU MỚI
-     */
+
     private void saveRoleUsingSaveContext(ResourceRoleModel model, List<ResourcePolicyModel> newPolicies) {
-        // B1: Load Role từ DB. QUAN TRỌNG: Phải fetch "resourcePolicies" để biết cái cũ là cái nào.
-        // Nếu không fetch, list cũ sẽ null -> Không xóa được gì cả.
         ResourceRoleEntity dbRoleEntity = dataManager.load(ResourceRoleEntity.class)
                 .query("select r from sec_ResourceRoleEntity r where r.code = :code")
                 .parameter("code", model.getCode())
@@ -314,48 +288,34 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
                     return r;
                 });
 
-        // Update thông tin cơ bản
         dbRoleEntity.setName(model.getName());
         dbRoleEntity.setDescription(model.getDescription());
         dbRoleEntity.setScopes(model.getScopes());
         dbRoleEntity.setChildRoles(model.getChildRoles());
 
-        // B2: CHUẨN BỊ SAVE CONTEXT
         io.jmix.core.SaveContext saveContext = new io.jmix.core.SaveContext();
 
-        // B3: XỬ LÝ DANH SÁCH CŨ (ĐỂ XÓA)
         List<ResourcePolicyEntity> oldPolicies = dbRoleEntity.getResourcePolicies();
         if (oldPolicies != null && !oldPolicies.isEmpty()) {
-            // Thêm toàn bộ policy cũ vào danh sách "removing".
-            // Jmix sẽ cập nhật DELETE_TS cho các dòng này.
             saveContext.removing(new ArrayList<>(oldPolicies));
-
-            // Xóa tham chiếu trên object cha để tránh lỗi hibernate
             oldPolicies.clear();
         } else {
             dbRoleEntity.setResourcePolicies(new ArrayList<>());
         }
 
-        // B4: XỬ LÝ DANH SÁCH MỚI (ĐỂ INSERT)
+
         for (ResourcePolicyModel pm : newPolicies) {
             ResourcePolicyEntity entity = dataManager.create(ResourcePolicyEntity.class);
-            entity.setRole(dbRoleEntity); // Gán cha
-
-            // Map dữ liệu
+            entity.setRole(dbRoleEntity);
             entity.setType(pm.getType());
             entity.setResource(pm.getResource());
             entity.setAction(pm.getAction());
             entity.setEffect(pm.getEffect());
             entity.setPolicyGroup(pm.getPolicyGroup());
-
-            // Thêm vào Role
             dbRoleEntity.getResourcePolicies().add(entity);
         }
 
-        // B5: LƯU ROLE (đã chứa list mới)
         saveContext.saving(dbRoleEntity);
-
-        // B6: THỰC THI (1 Transaction duy nhất: Xóa cái cũ, Lưu cái mới)
         dataManager.save(saveContext);
     }
 
@@ -366,8 +326,6 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
         if (specificFragment != null) all.addAll(specificFragment.collectSpecificPolicies());
         return all;
     }
-
-    // ======================= Mapping helpers (KHÔNG ĐỔI) =======================
 
     private ResourceRoleModel mapDbRoleToModel(ResourceRoleEntity roleEntity) {
         ResourceRoleModel m = metadata.create(ResourceRoleModel.class);
