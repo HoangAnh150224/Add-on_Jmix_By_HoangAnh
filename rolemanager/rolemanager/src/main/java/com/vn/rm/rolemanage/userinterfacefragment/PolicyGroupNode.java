@@ -19,8 +19,8 @@ public class PolicyGroupNode {
     private Boolean allow;
     private Boolean deny;
 
-    // dùng để phân biệt Deny mặc định UI và Deny thật
     private Boolean denyDefault = false;
+    private Boolean annotated = false;
 
     private PolicyGroupNode parent;
     private List<PolicyGroupNode> children = new ArrayList<>();
@@ -30,6 +30,9 @@ public class PolicyGroupNode {
         this.group = group;
     }
 
+
+    public Boolean getAnnotated() { return annotated; }
+    public void setAnnotated(Boolean annotated) { this.annotated = annotated; }
     public String getName() { return name; }
     public Boolean getGroup() { return group; }
     public String getType() { return type; }
@@ -61,9 +64,16 @@ public class PolicyGroupNode {
     public Boolean isLeaf() { return !group; }
 
     public void resetState() {
-        effect = null;
-        allow = false;
-        deny = false;
-        denyDefault = true; // default deny when loading from DB
+        // ✔ KHÔNG được deny
+        if (Boolean.TRUE.equals(annotated)) {
+            // Annotated → ALLOW
+            this.effect = "ALLOW";
+            this.allow = true;
+        } else {
+            // Không annotated → TRẠNG THÁI TRỐNG (neutral)
+            this.effect = null;
+            this.allow = false;
+        }
+        this.deny = false;
     }
 }
