@@ -187,35 +187,7 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
         updateAttrHeaderFromRows();
     }
 
-    private void applyAllowAllToAttributes(String entityName, boolean allow) {
-        if (Strings.isNullOrEmpty(entityName) || "*".equals(entityName) || "All entities (*)".equals(entityName)) return;
 
-        List<AttributeResourceModel> attrs = attrCache.computeIfAbsent(entityName, k -> {
-            List<AttributeResourceModel> fromService = roleManagerService.buildAttrRowsForEntity(k);
-            return (fromService != null) ? new ArrayList<>(fromService) : new ArrayList<>();
-        });
-
-        for (AttributeResourceModel attr : attrs) {
-            if (allow) {
-                attr.setModify(true);
-                attr.setView(false);
-            } else {
-                attr.setModify(false);
-                attr.setView(false);
-            }
-        }
-
-        // Chỉ refresh bảng Attribute nếu đang xem đúng Entity đó
-        EntityMatrixRow current = entityMatrixDc.getItemOrNull();
-        if (current != null && Objects.equals(current.getEntityName(), entityName)) {
-            attrMatrixDc.setItems(new ArrayList<>(attrs));
-            updateAttrHeaderFromRows();
-        }
-
-        updateEntityAttributesSummary(entityName);
-    }
-
-    // --- FIX LỖI QUAN TRỌNG NHẤT Ở ĐÂY ---
     private void updateEntityAttributesSummary(String entityName) {
         // Lấy đúng danh sách attribute của Entity cần update từ Cache
         List<AttributeResourceModel> attributesForThisEntity = attrCache.get(entityName);
