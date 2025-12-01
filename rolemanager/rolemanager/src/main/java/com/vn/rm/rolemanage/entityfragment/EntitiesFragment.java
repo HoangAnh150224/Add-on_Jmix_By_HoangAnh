@@ -8,7 +8,6 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.data.renderer.LitRenderer;
 import com.vn.rm.rolemanage.service.RoleManagerService;
 import io.jmix.core.Metadata;
-import io.jmix.core.MetadataTools;
 import io.jmix.flowui.component.grid.DataGrid;
 import io.jmix.flowui.fragment.Fragment;
 import io.jmix.flowui.fragment.FragmentDescriptor;
@@ -46,8 +45,6 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
     @Autowired
     private RoleManagerService roleManagerService;
 
-
-
     // --- Biến kiểm tra Role ReadOnly ---
     private boolean isRoleReadOnly = false;
 
@@ -67,6 +64,13 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
 
     // Cache chỉ dùng cho dữ liệu Attribute
     private final Map<String, List<AttributeResourceModel>> attrCache = new HashMap<>();
+
+    // Template HTML đơn giản cho Checkbox (Đã bỏ indeterminate)
+    private static final String CHECKBOX_RENDERER_HTML =
+            "<vaadin-checkbox " +
+                    "?checked='${item.checked}' " +
+                    "?disabled='${item.disabled}' " +
+                    "@change='${handleChange}'></vaadin-checkbox>";
 
     // ========================================================================
     // Setter & External Logic
@@ -146,7 +150,6 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
                 Optional.ofNullable(resourcePoliciesDc.getItems()).orElseGet(List::of);
 
         attrCache.clear();
-
         roleManagerService.updateEntityMatrix(rows, policies, attrCache);
 
         entityMatrixDc.setItems(rows);
@@ -170,36 +173,28 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
 
         if (attrEntityLabel != null) attrEntityLabel.setText("Entity: " + entityName);
 
-        // Lấy từ cache hoặc load mới (Copy list để an toàn)
         List<AttributeResourceModel> rows = attrCache.computeIfAbsent(entityName, k -> {
             List<AttributeResourceModel> fromService = roleManagerService.buildAttrRowsForEntity(k);
             if (fromService == null) return new ArrayList<>();
             return new ArrayList<>(fromService);
         });
 
-
         attrMatrixDc.setItems(new ArrayList<>(rows));
         updateAttrHeaderState(false);
         updateAttrHeaderFromRows();
     }
 
-
     private void updateEntityAttributesSummary(String entityName) {
-        // Lấy đúng danh sách attribute của Entity cần update từ Cache
         List<AttributeResourceModel> attributesForThisEntity = attrCache.get(entityName);
-
-        // Nếu chưa có trong cache thì load mới (tránh null pointer)
         if (attributesForThisEntity == null) {
             attributesForThisEntity = roleManagerService.buildAttrRowsForEntity(entityName);
             attrCache.put(entityName, attributesForThisEntity);
         }
 
-        // Truyền đúng list attribute của entity đó vào Service
-        // TUYỆT ĐỐI KHÔNG DÙNG attrMatrixDc.getItems() VÌ NÓ CÓ THỂ ĐANG SHOW ENTITY KHÁC
         roleManagerService.updateEntityAttributesSummary(
                 entityName,
                 entityMatrixDc.getItems(),
-                attributesForThisEntity, // <--- Đã sửa chỗ này
+                attributesForThisEntity,
                 attrCache
         );
     }
@@ -238,21 +233,10 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
     private void installMatrixColumns() {
         DataGrid.Column<EntityMatrixRow> allowAllCol = entityMatrixTable.getColumnByKey("allowAllCol");
         if (allowAllCol != null) {
-            String html = "<vaadin-checkbox " +
-                    "?checked='${item.checked}' " +
-                    ".indeterminate='${item.indet}' " +
-                    "?disabled='${item.disabled}' " +
-                    "@change='${handleChange}'></vaadin-checkbox>";
-
-            allowAllCol.setRenderer(LitRenderer.<EntityMatrixRow>of(html)
+            // Sử dụng HTML đơn giản đã bỏ indeterminate
+            allowAllCol.setRenderer(LitRenderer.<EntityMatrixRow>of(CHECKBOX_RENDERER_HTML)
                     .withProperty("checked", row -> T(row.getAllowAll()))
                     .withProperty("disabled", row -> isRoleReadOnly)
-                    .withProperty("indet", row -> {
-                        boolean isAll = T(row.getAllowAll());
-                        boolean hasAny = T(row.getCanCreate()) || T(row.getCanRead()) ||
-                                T(row.getCanUpdate()) || T(row.getCanDelete());
-                        return !isAll && hasAny;
-                    })
                     .withFunction("handleChange", row -> {
                         boolean newVal = !T(row.getAllowAll());
                         row.setAllowAll(newVal);
@@ -261,7 +245,6 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
                         row.setCanUpdate(newVal);
                         row.setCanDelete(newVal);
 
-//                        applyAllowAllToAttributes(row.getEntityName(), newVal);
                         entityMatrixTable.getDataProvider().refreshItem(row);
                         updateHeaderAllowAllFromRows();
                     }));
@@ -283,12 +266,7 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
     private void installPermissionColumn(String colId, Function<EntityMatrixRow, Boolean> getter, BiConsumer<EntityMatrixRow, Boolean> setter) {
         DataGrid.Column<EntityMatrixRow> col = entityMatrixTable.getColumnByKey(colId);
         if (col != null) {
-            String html = "<vaadin-checkbox " +
-                    "?checked='${item.checked}' " +
-                    "?disabled='${item.disabled}' " +
-                    "@change='${handleChange}'></vaadin-checkbox>";
-
-            col.setRenderer(LitRenderer.<EntityMatrixRow>of(html)
+            col.setRenderer(LitRenderer.<EntityMatrixRow>of(CHECKBOX_RENDERER_HTML)
                     .withProperty("checked", row -> T(getter.apply(row)))
                     .withProperty("disabled", row -> isRoleReadOnly)
                     .withFunction("handleChange", row -> {
@@ -326,26 +304,18 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
     private void installAttrCheckboxColumn(String colId, Function<AttributeResourceModel, Boolean> getter, BiConsumer<AttributeResourceModel, Boolean> setter) {
         DataGrid.Column<AttributeResourceModel> col = attrMatrixTable.getColumnByKey(colId);
         if (col != null) {
-            String html = "<vaadin-checkbox " +
-                    "?checked='${item.checked}' " +
-                    "?disabled='${item.disabled}' " +
-                    "@change='${handleChange}'></vaadin-checkbox>";
-
-            col.setRenderer(LitRenderer.<AttributeResourceModel>of(html)
+            col.setRenderer(LitRenderer.<AttributeResourceModel>of(CHECKBOX_RENDERER_HTML)
                     .withProperty("checked", row -> T(getter.apply(row)))
                     .withProperty("disabled", row -> isRoleReadOnly)
                     .withFunction("handleChange", row -> {
                         boolean newVal = !T(getter.apply(row));
                         setter.accept(row, newVal);
 
-                        // Refresh dòng hiện tại của bảng Attribute
                         attrMatrixTable.getDataProvider().refreshItem(row);
                         updateAttrHeaderFromRows();
 
-                        // CẬP NHẬT NGAY BẢNG ENTITY
                         EntityMatrixRow currentEntity = entityMatrixDc.getItemOrNull();
                         if (currentEntity != null) {
-                            // Đồng bộ list hiện tại vào cache để tính toán đúng
                             List<AttributeResourceModel> currentItems = attrMatrixDc.getItems();
                             attrCache.put(currentEntity.getEntityName(), new ArrayList<>(currentItems));
 
@@ -355,6 +325,7 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
                     }));
         }
     }
+
     // ========================================================================
     // Header Components
     // ========================================================================
@@ -364,10 +335,7 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
         DataGrid.Column<EntityMatrixRow> entityCol = entityMatrixTable.getColumns().isEmpty() ? null : entityMatrixTable.getColumns().get(0);
         if (entityCol != null) row.getCell(entityCol).setText("All entities (*)");
 
-        // --- XỬ LÝ CHECKBOX: ALL ENTITIES ---
         headerAllowAllCb = createHeaderCheckbox(row, "allowAllCol", (r, v) -> {
-            // Logic này chỉ dùng cho từng dòng lẻ (nếu cần),
-            // còn logic chính của header nằm ở listener bên dưới.
             if (isRoleReadOnly) return;
             r.setAllowAll(v);
             r.setCanCreate(v);
@@ -382,46 +350,32 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
                 boolean v = Boolean.TRUE.equals(e.getValue());
 
                 List<EntityMatrixRow> items = new ArrayList<>(entityMatrixDc.getItems());
-
-                // Duyệt qua tất cả Entity để cập nhật
                 for (EntityMatrixRow r : items) {
                     if (!isRoleReadOnly) {
-                        // 1. Cập nhật quyền CRUD (Entity)
                         r.setAllowAll(v);
                         r.setCanCreate(v);
                         r.setCanRead(v);
                         r.setCanUpdate(v);
                         r.setCanDelete(v);
 
-                        // 2. Cập nhật quyền ATTRIBUTE (MỚI THÊM)
                         if (v) {
-                            // Nếu đang tích chọn -> Set Modify All cho Attribute của entity này
-
-                            // Lấy list attribute từ cache hoặc load mới nếu chưa có
                             List<AttributeResourceModel> attrs = attrCache.computeIfAbsent(r.getEntityName(),
                                     k -> roleManagerService.buildAttrRowsForEntity(k));
-
-                            // Set Modify = true cho tất cả attribute
                             for (AttributeResourceModel a : attrs) {
                                 a.setModify(true);
                                 a.setView(false);
                             }
-
-                            // Cập nhật lại chuỗi hiển thị "*" cho dòng entity này
                             roleManagerService.updateEntityAttributesSummary(r.getEntityName(), items, attrs, attrCache);
                         }
                     }
                 }
 
-                // 3. Nếu bỏ chọn (Uncheck All) -> Reset toàn bộ attribute về false
                 if (!v) {
                     resetAllAttributesFlags();
                 }
 
-                // 4. Refresh lại bảng Entity để thấy dấu "*"
                 entityMatrixTable.getDataProvider().refreshAll();
 
-                // 5. Nếu đang chọn 1 dòng nào đó, refresh luôn bảng Attribute bên phải
                 EntityMatrixRow current = entityMatrixDc.getItemOrNull();
                 if (current != null) {
                     loadAttributesForEntity(current.getEntityName());
@@ -431,7 +385,6 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
             });
         }
 
-        // --- CÁC CHECKBOX HEADER KHÁC (Giữ nguyên) ---
         headerCreateCb = createHeaderCheckbox(row, "createCol", (r, v) -> {
             if (isRoleReadOnly) return;
             r.setCanCreate(v);
@@ -455,6 +408,7 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
 
         updateHeadersState();
     }
+
     private Checkbox createHeaderCheckbox(HeaderRow headerRow, String colKey, BiConsumer<EntityMatrixRow, Boolean> logic) {
         DataGrid.Column<EntityMatrixRow> col = entityMatrixTable.getColumnByKey(colKey);
         if (col == null) return null;
@@ -510,68 +464,46 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
         DataGrid.Column<AttributeResourceModel> modifyCol = attrMatrixTable.getColumnByKey("modifyCol");
         if (attrCol != null) row.getCell(attrCol).setText("All attributes (*)");
 
-        // --- Checkbox Header: VIEW ---
         if (viewCol != null) {
             headerAttrViewCb = new Checkbox();
             headerAttrViewCb.addValueChangeListener(e -> {
                 if (updatingAttrHeaderFromRows || !e.isFromClient()) return;
                 boolean v = Boolean.TRUE.equals(e.getValue());
-
-                // 1. Lấy danh sách đang hiển thị và cập nhật giá trị
                 List<AttributeResourceModel> items = attrMatrixDc.getItems();
                 items.forEach(r -> {
                     r.setView(v);
                     if (v) r.setModify(false);
                 });
-
-                // 2. Refresh bảng Attribute (Bên phải)
                 attrMatrixTable.getDataProvider().refreshAll();
                 updateAttrHeaderFromRows();
 
-                // 3. CẬP NHẬT NGAY BẢNG ENTITY (Bên trái)
                 EntityMatrixRow currentEntity = entityMatrixDc.getItemOrNull();
                 if (currentEntity != null) {
-                    // Cực kỳ quan trọng: Đồng bộ list items vừa sửa vào cache
                     attrCache.put(currentEntity.getEntityName(), new ArrayList<>(items));
-
-                    // Tính toán lại chuỗi hiển thị (ví dụ từ "" thành "*")
                     updateEntityAttributesSummary(currentEntity.getEntityName());
-
-                    // Ép bảng Entity vẽ lại dòng này để hiện dấu "*"
                     entityMatrixTable.getDataProvider().refreshItem(currentEntity);
                 }
             });
             row.getCell(viewCol).setComponent(headerAttrViewCb);
         }
 
-        // --- Checkbox Header: MODIFY ---
         if (modifyCol != null) {
             headerAttrModifyCb = new Checkbox();
             headerAttrModifyCb.addValueChangeListener(e -> {
                 if (updatingAttrHeaderFromRows || !e.isFromClient()) return;
                 boolean v = Boolean.TRUE.equals(e.getValue());
-
-                // 1. Lấy danh sách đang hiển thị và cập nhật giá trị
                 List<AttributeResourceModel> items = attrMatrixDc.getItems();
                 items.forEach(r -> {
                     r.setModify(v);
                     if (v) r.setView(false);
                 });
-
-                // 2. Refresh bảng Attribute (Bên phải)
                 attrMatrixTable.getDataProvider().refreshAll();
                 updateAttrHeaderFromRows();
 
-                // 3. CẬP NHẬT NGAY BẢNG ENTITY (Bên trái)
                 EntityMatrixRow currentEntity = entityMatrixDc.getItemOrNull();
                 if (currentEntity != null) {
-                    // Cực kỳ quan trọng: Đồng bộ list items vừa sửa vào cache
                     attrCache.put(currentEntity.getEntityName(), new ArrayList<>(items));
-
-                    // Tính toán lại chuỗi hiển thị (ví dụ từ "" thành "*")
                     updateEntityAttributesSummary(currentEntity.getEntityName());
-
-                    // Ép bảng Entity vẽ lại dòng này để hiện dấu "*"
                     entityMatrixTable.getDataProvider().refreshItem(currentEntity);
                 }
             });
