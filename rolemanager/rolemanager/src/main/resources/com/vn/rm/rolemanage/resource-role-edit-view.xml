@@ -25,7 +25,7 @@
     </facets>
 
     <actions>
-        <action id="saveAction" icon="CHECK" text="Save" />
+        <action id="saveAction" type="detail_saveClose"/>
         <action id="closeAction" type="detail_close"/>
     </actions>
 
@@ -41,10 +41,10 @@
                 <textField id="sourceField" property="source" readOnly="true" themeNames="small"/>
 
                 <!-- SỬA 3: QUAN TRỌNG - Bỏ readOnly="true" để nhập được khi tạo mới -->
-                <textField id="codeField" property="code" themeNames="small"/>
+                <textField id="codeField" property="code" readOnly="true"/>
 
                 <!-- SỬA 4: Bỏ required="true" để Java validation xử lý -->
-                <checkboxGroup id="scopesField" property="scopes"
+                <checkboxGroup id="scopesField" property="scopes" readOnly="true"
                                themeNames="small helper-above-field"/>
 
                 <textArea id="descriptionField" property="description" height="6em" themeNames="small"/>

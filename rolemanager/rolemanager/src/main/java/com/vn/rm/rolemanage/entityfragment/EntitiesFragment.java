@@ -46,11 +46,7 @@ public class EntitiesFragment extends Fragment<VerticalLayout> {
     @Autowired
     private RoleManagerService roleManagerService;
 
-    @Autowired
-    private Metadata metadata;
 
-    @Autowired
-    private MetadataTools metadataTools;
 
     // --- Biến kiểm tra Role ReadOnly ---
     private boolean isRoleReadOnly = false;
