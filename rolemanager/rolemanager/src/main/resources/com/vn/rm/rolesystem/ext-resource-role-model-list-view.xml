@@ -2,33 +2,41 @@
 <view xmlns="http://jmix.io/schema/flowui/view"
       title="msg://io.jmix.securityflowui.view.resourcerole/resourceRoleModelListView.title"
       messagesGroup="io.jmix.securityflowui.view.resourcerole">
+
     <data readOnly="true">
         <collection id="roleModelsDc"
                     class="io.jmix.security.model.ResourceRoleModel">
         </collection>
     </data>
+
     <facets>
         <settings auto="true"/>
     </facets>
+
     <actions>
         <action id="selectAction" type="lookup_select"/>
         <action id="discardAction" type="lookup_discard"/>
     </actions>
+
     <layout expand="roleModelsTable">
         <hbox id="buttonsPanel" classNames="buttons-panel">
 
             <button id="removeBtn" action="roleModelsTable.remove"/>
             <button id="assignToUsersBtn" action="roleModelsTable.assignToUsers"/>
+
             <dropdownButton id="exportBtn" text="msg://exportMenu.text" icon="DOWNLOAD">
                 <items>
                     <actionItem id="exportJSONItem" ref="roleModelsTable.exportJSON"/>
                     <actionItem id="exportZIPItem" ref="roleModelsTable.exportZIP"/>
                 </items>
             </dropdownButton>
+
             <fileUploadField id="importField"
                              uploadIcon="UPLOAD"
                              uploadText="msg://importMenu.text"
                              acceptedFileTypes=".json,.zip"/>
+
+            <!-- Nút custom -->
             <button id="createCustomRoleBtn" action="roleModelsTable.createCustomRole"/>
             <button id="editCustomRoleBtn" action="roleModelsTable.editCustomRole"/>
         </hbox>
@@ -38,16 +46,26 @@
                   minHeight="20em"
                   columnReorderingAllowed="true"
                   width="100%">
+
             <actions>
                 <action id="create" type="list_create"/>
-                <action id="edit" type="list_edit"/>
-                <action id="remove" type="list_remove"/>
+                <action id="edit"   type="list_edit"/>
+
+                <action id="remove"        type="list_remove"/>
                 <action id="assignToUsers" type="sec_assignToUsers"/>
-                <action id="exportJSON" text="msg://actions.exportJSON"/>
-                <action id="exportZIP" text="msg://actions.exportZIP"/>
-                <action id="createCustomRole" text="Thêm mới quyền" />
-                <action id="editCustomRole" text="Sửa quyền" />
+                <action id="exportJSON"    text="msg://actions.exportJSON"/>
+                <action id="exportZIP"     text="msg://actions.exportZIP"/>
+
+                <!-- Action custom, dùng cho 2 nút trên -->
+                <action id="createCustomRole"
+                        text="Thêm mới quyền"
+                        type="list_create"/>
+
+                <action id="editCustomRole"
+                        text="Sửa quyền"
+                        type="list_edit"/>
             </actions>
+
             <columns resizable="true">
                 <column property="name"/>
                 <column property="code"/>
@@ -56,6 +74,7 @@
                 <column property="scopes" flexGrow="0"/>
             </columns>
         </dataGrid>
+
         <hbox id="lookupActions" visible="false">
             <button id="selectBtn" action="selectAction"/>
             <button id="discardBtn" action="discardAction"/>
