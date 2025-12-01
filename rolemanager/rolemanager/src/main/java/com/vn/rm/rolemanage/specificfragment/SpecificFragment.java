@@ -356,7 +356,7 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
         List<ResourcePolicyModel> out = new ArrayList<>();
 
         if (Boolean.TRUE.equals(allowAllSpecific.getValue())) {
-            out.add(roleManagerService.createPolicy("specific", "*", "execute"));
+            out.add(roleManagerService.createPolicy("specific", "*", "access"));
             return out;
         }
 
@@ -369,7 +369,7 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
                 out.add(roleManagerService.createPolicy(
                         "specific",
                         leaf.getName(),
-                        "execute"
+                        "access"
                 ));
             }
         }
