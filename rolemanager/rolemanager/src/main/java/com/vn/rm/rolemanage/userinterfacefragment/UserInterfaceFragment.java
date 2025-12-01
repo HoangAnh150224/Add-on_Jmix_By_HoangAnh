@@ -57,8 +57,15 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
 
         // 5) Check AllowAll từ DB policies
         boolean hasAllowAll = model.getResourcePolicies().stream()
-                .anyMatch(p -> "*".equals(p.getResource())
-                        && ResourcePolicyEffect.ALLOW.equals(p.getEffect()));
+                .anyMatch(p ->
+                        "*".equals(p.getResource())
+                                && ResourcePolicyEffect.ALLOW.equals(p.getEffect())
+                                && (
+                                "screen".equalsIgnoreCase(p.getType()) ||
+                                        "menu".equalsIgnoreCase(p.getType())
+                        )
+                );
+
 
         suppressAllowAllEvent = true;
         allowAllViews.setValue(hasAllowAll);  // vẫn set được vì enabled/disabled ok
