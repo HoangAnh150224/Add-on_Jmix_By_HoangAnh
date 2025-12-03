@@ -3,7 +3,6 @@ package com.vn.app.security;
 import io.jmix.security.role.annotation.ResourceRole;
 import io.jmix.security.role.annotation.SpecificPolicy;
 import io.jmix.securityflowui.role.UiMinimalPolicies;
-import io.jmix.securityflowui.role.annotation.MenuPolicy;
 import io.jmix.securityflowui.role.annotation.ViewPolicy;
 
 @ResourceRole(name = "UI: minimal access", code = UiMinimalRole.CODE)
@@ -18,6 +17,4 @@ public interface UiMinimalRole extends UiMinimalPolicies {
     @SpecificPolicy(resources = "ui.loginToUi")
     void login();
 
-    @MenuPolicy(menuIds = "User.list")
-    void screens();
 }

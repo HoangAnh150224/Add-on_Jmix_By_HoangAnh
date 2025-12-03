@@ -367,15 +367,23 @@
          * Tạo key duy nhất cho leaf bằng resource + action.
          */
         public String buildLeafKey(PolicyGroupNode node) {
-            return buildLeafKey(node.getResource(), node.getAction());
+            return buildLeafKey(node.getResource(), node.getAction(), node.getType());
         }
+
         /**
          * Trả về "resource|action" để dùng làm key đồng bộ leaf.
          */
-        public String buildLeafKey(String resource, String action) {
+        public String buildLeafKey(String resource, String action, String type) {
+
             if (resource == null || action == null)
                 return null;
 
+            // MENU có key riêng -> không trùng với SCREEN
+            if ("menu".equalsIgnoreCase(type)) {
+                return resource + "|" + action.toLowerCase() + "|menu";
+            }
+
+            // SCREEN key chuẩn (để applyPoliciesFromModel match)
             return resource + "|" + action.toLowerCase();
         }
 
@@ -413,7 +421,7 @@
          */
         public void indexLeaves(PolicyGroupNode node) {
             if (node.isLeaf()) {
-                String key = buildLeafKey(node);
+                String key = buildLeafKey(node.getResource(), node.getAction(), node.getType());
                 if (key != null) {
                     leafIndex.computeIfAbsent(key, k -> new ArrayList<>()).add(node);
                 }
@@ -535,19 +543,7 @@
             return cur;
         }
 
-        /**
-         * Thêm leaf VIEW hoặc MENU vào cây, tùy thuộc view có trong menu hay không.
-         */
-        /**
-         * Thêm leaf VIEW hoặc MENU vào cây, tùy thuộc view có trong menu hay không.
-         */
-        /**
-         * Thêm leaf VIEW và MENU sao cho MENU dùng chung key với VIEW
-         */
-        /**
-         * Thêm leaf VIEW hoặc MENU vào cây, nhưng KEY phải là viewId
-         * để MENU ↔ VIEW sync được theo resource|access.
-         */
+
         private void addLeaf(PolicyGroupNode parent, String viewId, String meta, List<MenuItem> menuItems) {
 
             boolean isAnnotated = isAnnotatedView(viewId);
@@ -568,7 +564,7 @@
                     PolicyGroupNode allowMenu = new PolicyGroupNode(caption, false);
                     allowMenu.setType("menu");
                     allowMenu.setResource(viewId);      // ✔ MUST USE VIEW ID (sync key)
-                    allowMenu.setAction("access");
+                    allowMenu.setAction("Access");
                     allowMenu.setAnnotated(isAnnotated);
                     allowMenu.setParent(parent);
 
@@ -579,7 +575,7 @@
                 PolicyGroupNode allowView = new PolicyGroupNode("View: " + viewId, false);
                 allowView.setType("screen");
                 allowView.setResource(viewId);          // ✔ same key
-                allowView.setAction("access");
+                allowView.setAction("Access");
                 allowView.setMeta(meta);
                 allowView.setAnnotated(isAnnotated);
                 allowView.setParent(parent);
@@ -594,7 +590,7 @@
             PolicyGroupNode leaf = new PolicyGroupNode(viewId, false);
             leaf.setType("screen");
             leaf.setResource(viewId);
-            leaf.setAction("access");
+            leaf.setAction("Access");
             leaf.setMeta(meta);
             leaf.setAnnotated(isAnnotated);
             leaf.setParent(parent);
@@ -708,8 +704,8 @@
 
             // ----------------------------------------------------
             // CASE 1: Menu item có VIEW → tạo 2 leaf:
-            //   - MENU leaf (menu, access, resource=viewId)
-            //   - VIEW leaf (screen, access, resource=viewId)
+            //   - MENU leaf (menu, Access, resource=viewId)
+            //   - VIEW leaf (screen, Access, resource=viewId)
             // ----------------------------------------------------
             if (hasView) {
 
@@ -719,7 +715,7 @@
                 PolicyGroupNode allowMenu = new PolicyGroupNode("Allow in menu", false);
                 allowMenu.setType("menu");
                 allowMenu.setResource(viewId);     // ✔ MUST USE viewId
-                allowMenu.setAction("access");
+                allowMenu.setAction("Access");
                 allowMenu.setParent(groupNode);
                 groupNode.getChildren().add(allowMenu);
 
@@ -727,7 +723,7 @@
                 PolicyGroupNode allowView = new PolicyGroupNode("View: " + viewId, false);
                 allowView.setType("screen");
                 allowView.setResource(viewId);     // ✔ same key as menu
-                allowView.setAction("access");
+                allowView.setAction("Access");
                 allowView.setParent(groupNode);
                 groupNode.getChildren().add(allowView);
             }
@@ -750,7 +746,7 @@
                 String res = item.getView() != null ? item.getView() : item.getId();
                 leaf.setResource(res);
 
-                leaf.setAction("access");
+                leaf.setAction("Access");
                 leaf.setParent(groupNode);
                 groupNode.getChildren().add(leaf);
             }
@@ -758,15 +754,7 @@
         }
 
 
-        /**
-         * Đặt allow/deny cho toàn bộ leaf trong cây.
-         */
-
-
-
-        /**
-         * Thu thập tất cả leaf đang ALLOW để lưu thành ResourcePolicyModel.
-         */
+   
         public void collect(PolicyGroupNode node, List<ResourcePolicyModel> list) {
 
             if (node.isLeaf() && "ALLOW".equals(node.getEffect())) {
@@ -797,44 +785,41 @@
             boolean isMenu = "menu".equalsIgnoreCase(node.getType());
             boolean isView = "screen".equalsIgnoreCase(node.getType());
 
-            String key = buildLeafKey(node);
-            if (key == null) {
-                applyState(node, allow);
-                return;
-            }
+            String keyScreen = buildLeafKey(node.getResource(), node.getAction(), "screen");
+            String keyMenu   = buildLeafKey(node.getResource(), node.getAction(), "menu");
 
-            List<PolicyGroupNode> linked = leafIndex.get(key);
-            if (linked == null) {
+            // ✅ gom tất cả nodes liên quan cùng resource/action
+            List<PolicyGroupNode> linked = new ArrayList<>();
+            List<PolicyGroupNode> screenNodes = getNodesByKey(keyScreen);
+            List<PolicyGroupNode> menuNodes = getNodesByKey(keyMenu);
+            if (screenNodes != null) linked.addAll(screenNodes);
+            if (menuNodes != null) linked.addAll(menuNodes);
+
+            if (linked.isEmpty()) {
                 applyState(node, allow);
                 return;
             }
 
             // ================================
-            // CASE 1: MENU — ALWAYS affects VIEW
+            // CASE 1: MENU → ảnh hưởng VIEW
             // ================================
             if (isMenu) {
-
                 for (PolicyGroupNode target : linked) {
-
                     if ("menu".equalsIgnoreCase(target.getType())) {
-                        // MENU ↔ MENU vẫn sync đầy đủ
+                        // MENU ↔ MENU sync đầy đủ
                         target.setEffect(allow ? "ALLOW" : null);
                         target.setAllow(allow);
                         target.setDeny(!allow);
                     }
 
                     if ("screen".equalsIgnoreCase(target.getType())) {
-
                         if (allow) {
-                            // MENU = ALLOW → VIEW = ALLOW
+                            // ✅ MENU = ALLOW → VIEW = ép ALLOW luôn
                             target.setEffect("ALLOW");
                             target.setAllow(true);
                             target.setDeny(false);
-
                         } else {
-                            // MENU = DENY → KHÔNG ĐƯỢC TẮT VIEW
-                            // → GIỮ NGUYÊN TRẠNG THÁI VIEW
-                            // → KHÔNG SET ANYTHING
+                            // ❌ MENU = DENY → VIEW giữ nguyên (không ép deny)
                         }
                     }
                 }
@@ -843,13 +828,10 @@
                 return;
             }
 
-
-
             // ================================
-            // CASE 2: VIEW — only sync VIEW ↔ VIEW
+            // CASE 2: VIEW → chỉ sync VIEW ↔ VIEW
             // ================================
             if (isView) {
-
                 for (PolicyGroupNode target : linked) {
                     if ("screen".equalsIgnoreCase(target.getType())) {
                         target.setEffect(allow ? "ALLOW" : null);
@@ -872,18 +854,27 @@
             if (!"screen".equalsIgnoreCase(viewNode.getType()))
                 return false;
 
-            String key = buildLeafKey(viewNode);
-            if (key == null) return false;
+            // ✅ lấy cả key của screen và menu
+            String keyScreen = buildLeafKey(viewNode.getResource(), viewNode.getAction(), "screen");
+            String keyMenu   = buildLeafKey(viewNode.getResource(), viewNode.getAction(), "menu");
 
-            List<PolicyGroupNode> linked = getNodesByKey(key);
-            if (linked == null) return false;
+            List<PolicyGroupNode> linked = new ArrayList<>();
 
-            // Nếu có 1 MENU đang ALLOW → khóa view
+            List<PolicyGroupNode> screenNodes = getNodesByKey(keyScreen);
+            List<PolicyGroupNode> menuNodes = getNodesByKey(keyMenu);
+
+            if (screenNodes != null) linked.addAll(screenNodes);
+            if (menuNodes != null) linked.addAll(menuNodes);
+
+            if (linked.isEmpty()) return false;
+
+            // ✅ Có ít nhất 1 menu ALLOW → khóa view
             return linked.stream().anyMatch(n ->
                     "menu".equalsIgnoreCase(n.getType()) &&
                             "ALLOW".equals(n.getEffect())
             );
         }
+
         /**
          * Cập nhật trạng thái allow/deny cho một leaf.
          */
@@ -939,11 +930,11 @@
             return result;
         }
 
-
         public List<PolicyGroupNode> getNodesByKey(String key) {
             if (key == null) return null;
             return leafIndex.get(key);
         }
+
         private boolean isAnnotatedView(String viewId) {
 
             if (annotatedRole == null)

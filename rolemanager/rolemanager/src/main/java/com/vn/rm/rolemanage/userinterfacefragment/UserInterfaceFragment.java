@@ -127,69 +127,78 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
     // ===============================================
     // APPLY ANNOTATED
     // ===============================================
-    private void applyAnnotated(ResourceRoleModel model) {
+        private void applyAnnotated(ResourceRoleModel model) {
 
-        for (ResourcePolicyModel p : model.getResourcePolicies()) {
+            for (ResourcePolicyModel p : model.getResourcePolicies()) {
 
-            if (!ResourcePolicyEffect.ALLOW.equals(p.getEffect()))
-                continue;
-
-            // allow all
-            if ("*".equals(p.getResource())) {
-                suppressAllowAllEvent = true;
-                allowAllViews.setValue(true);
-                suppressAllowAllEvent = false;
-                applyAllowAll(true);
-                continue;
-            }
-
-            // action phải đúng, KHÔNG cứng "access"
-            String key = roleManagerService.buildLeafKey(p.getResource(), p.getAction());
-            List<PolicyGroupNode> nodes = roleManagerService.getNodesByKey(key);
-
-            if (nodes == null) continue;
-
-            for (PolicyGroupNode n : nodes) {
-
-                // annotated = cannot change
-                n.setAnnotated(true);
-
-                // annotated allow
-                n.setEffect("ALLOW");
-                n.setAllow(true);
-                n.setDeny(false);
-            }
-        }
-    }
-
-    private void applyDbPolicies(ResourceRoleModel model) {
-
-        for (ResourcePolicyModel p : model.getResourcePolicies()) {
-
-            String key = roleManagerService.buildLeafKey(p.getResource(), p.getAction());
-            List<PolicyGroupNode> nodes = roleManagerService.getNodesByKey(key);
-            if (nodes == null) continue;
-
-            for (PolicyGroupNode n : nodes) {
-
-                // annotated ALWAYS wins
-                if (Boolean.TRUE.equals(n.getAnnotated()))
+                if (!ResourcePolicyEffect.ALLOW.equalsIgnoreCase(p.getEffect()))
                     continue;
 
-                if (ResourcePolicyEffect.ALLOW.equals(p.getEffect())) {
-                    n.setEffect("ALLOW");
-                    n.setAllow(true);
-                    n.setDeny(false);
+                if ("*".equals(p.getResource())) {
+                    suppressAllowAllEvent = true;
+                    allowAllViews.setValue(true);
+                    suppressAllowAllEvent = false;
+                    applyAllowAll(true);
+                    continue;
                 }
 
-                if (ResourcePolicyEffect.DENY.equals(p.getEffect())) {
-                    n.setEffect(null);
-                    n.setAllow(false);
-                    n.setDeny(true);
+                // Annotated CHỈ apply vào screen
+                String key = roleManagerService.buildLeafKey(
+                        p.getResource(),
+                        "Access",
+                        "screen"
+                );
+
+                List<PolicyGroupNode> nodes = roleManagerService.getNodesByKey(key);
+                if (nodes == null) continue;
+
+                for (PolicyGroupNode n : nodes) {
+                    if (!"screen".equalsIgnoreCase(n.getType()))
+                        continue; // tuyệt đối không apply vào menu
+
+                    n.setAnnotated(true);
+                    roleManagerService.applyState(n, true);
+                    n.setDenyDefault(false);
                 }
             }
         }
-    }
+
+
+        // ===============================================
+        // APPLY DB POLICIES
+        // ===============================================
+        private void applyDbPolicies(ResourceRoleModel model) {
+
+            for (ResourcePolicyModel p : model.getResourcePolicies()) {
+
+                // DB chỉ apply vào SCREEN
+                if (!"screen".equalsIgnoreCase(p.getType()))
+                    continue;
+
+                String key = roleManagerService.buildLeafKey(
+                        p.getResource(),
+                        p.getAction(),
+                        "screen"
+                );
+
+                List<PolicyGroupNode> nodes = roleManagerService.getNodesByKey(key);
+                if (nodes == null) continue;
+
+                for (PolicyGroupNode n : nodes) {
+                    if (!"screen".equalsIgnoreCase(n.getType()))
+                        continue; // Không apply vào MENU
+
+                    if (ResourcePolicyEffect.ALLOW.equals(p.getEffect())) {
+                        roleManagerService.applyState(n, true);
+                        n.setDenyDefault(false);
+                    }
+
+                    if (ResourcePolicyEffect.DENY.equals(p.getEffect())) {
+                        roleManagerService.applyState(n, false);
+                    }
+                }
+            }
+        }
 
 
     // ===============================================
@@ -212,70 +221,92 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
                 .setHeader("Action")
                 .setTextAlign(ColumnTextAlign.CENTER);
 
-        policyTreeGrid.addColumn(new ComponentRenderer<>(Checkbox::new, (cb, node) -> {
+        // ============================
+// ALLOW COLUMN
+// ============================
+        policyTreeGrid.addColumn(new ComponentRenderer<>(() -> {
+            Checkbox cb = new Checkbox();
+            cb.addClassName("allow-checkbox");
+            return cb;
+        }, (cb, node) -> {
 
             cb.setVisible(node.isLeaf());
-            cb.setValue(node.isAllow());            // ✔ đúng logic
+            cb.setValue("ALLOW".equals(node.getEffect()));
 
             boolean locked = roleManagerService.isViewLockedByMenu(node);
-            cb.setEnabled(editable && !locked);
 
-            // ✔ luôn sync UI khi node refresh
-            cb.addAttachListener(ev -> cb.setValue(node.isAllow()));
+            if (locked) {
+                cb.setEnabled(false);  // 🔒 khóa VIEW khi MENU = ALLOW
+            } else {
+                cb.setEnabled(editable);
+            }
 
             cb.addValueChangeListener(e -> {
-                if (!e.isFromClient() || locked) return;
+                if (!e.isFromClient()) return;
 
-                boolean allow = e.getValue();
+                // ✅ Không cho phép thay đổi nếu bị lock
+                if (locked) {
+                    cb.setValue("ALLOW".equals(node.getEffect()));
+                    return;
+                }
 
-                node.setAllow(allow);
-                node.setDeny(!allow);
-                node.setEffect(allow ? "ALLOW" : null);
+                roleManagerService.syncLinkedLeaves(node, e.getValue());
 
-                roleManagerService.syncLinkedLeaves(node, allow);
-
-                policyTreeGrid.getDataProvider().refreshItem(node, true);
-                if (node.getParent() != null)
-                    policyTreeGrid.getDataProvider().refreshItem(node.getParent(), true);
+                // 🔁 Force Vaadin re-render toàn bộ grid (renderer được gọi lại)
+                policyTreeGrid.getDataProvider().refreshAll();
             });
-
         })).setHeader("Allow");
-        policyTreeGrid.addColumn(new ComponentRenderer<>(Checkbox::new, (cb, node) -> {
+
+
+// ============================
+// DENY COLUMN
+// ============================
+        policyTreeGrid.addColumn(new ComponentRenderer<>(() -> {
+            Checkbox cb = new Checkbox();
+            cb.addClassName("deny-checkbox");
+            return cb;
+        }, (cb, node) -> {
 
             cb.setVisible(node.isLeaf());
-            cb.setValue(node.isDeny());              // ✔ đúng logic
+            cb.setValue(!"ALLOW".equals(node.getEffect()));
 
             boolean locked = roleManagerService.isViewLockedByMenu(node);
-            cb.setEnabled(editable && !locked);
 
-            cb.addAttachListener(ev -> cb.setValue(node.isDeny()));
+            if (locked) {
+                cb.setEnabled(false); // 🔒 không cho deny nếu bị ép allow
+            } else {
+                cb.setEnabled(editable);
+            }
 
             cb.addValueChangeListener(e -> {
-                if (!e.isFromClient() || locked) return;
+                if (!e.isFromClient()) return;
+
+                if (locked) {
+                    cb.setValue(!"ALLOW".equals(node.getEffect()));
+                    return;
+                }
 
                 boolean deny = e.getValue();
                 boolean allow = !deny;
 
-                node.setDeny(deny);
-                node.setAllow(allow);
-                node.setEffect(allow ? "ALLOW" : null);
-
-                // Nếu tick Deny → tắt Allow All
                 if (deny) {
+                    node.setEffect(null);
+                    node.setAllow(false);
+                    node.setDeny(true);
+
                     suppressAllowAllEvent = true;
                     allowAllViews.setValue(false);
                     suppressAllowAllEvent = false;
+                } else {
+                    node.setEffect("ALLOW");
+                    node.setAllow(true);
+                    node.setDeny(false);
                 }
 
                 roleManagerService.syncLinkedLeaves(node, allow);
-
-                policyTreeGrid.getDataProvider().refreshItem(node, true);
-                if (node.getParent() != null)
-                    policyTreeGrid.getDataProvider().refreshItem(node.getParent(), true);
+                policyTreeGrid.getDataProvider().refreshAll();
             });
-
         })).setHeader("Deny");
-
 
     }
 
@@ -289,8 +320,8 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
 
         // allowAll thì return ngay
         if (Boolean.TRUE.equals(allowAllViews.getValue())) {
-            result.add(roleManagerService.createPolicy("screen", "*", "access"));
-            result.add(roleManagerService.createPolicy("menu", "*", "access"));
+            result.add(roleManagerService.createPolicy("screen", "*", "Access"));
+            result.add(roleManagerService.createPolicy("menu", "*", "Access"));
             return result;
         }
 
