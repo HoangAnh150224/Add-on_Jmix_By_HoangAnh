@@ -76,4 +76,16 @@ public class PolicyGroupNode {
         }
         this.deny = false;
     }
+
+    public Boolean isAllow() {
+        return Boolean.TRUE.equals(allow);
+    }
+
+
+
+    public Boolean isDeny() {
+        return Boolean.TRUE.equals(deny);
+    }
+
+
 }
