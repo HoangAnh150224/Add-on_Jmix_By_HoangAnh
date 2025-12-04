@@ -965,18 +965,12 @@
         }
 
         public ResourceRoleModel convertAnnotatedToModel(ResourceRole runtimeRole) {
-
-            if (runtimeRole == null)
-                return null;
-
             ResourceRoleModel model = new ResourceRoleModel();
             model.setCode(runtimeRole.getCode());
             model.setName(runtimeRole.getName());
-            model.setDescription(runtimeRole.getDescription());
             model.setSource(RoleSourceType.ANNOTATED_CLASS);
             model.setScopes(runtimeRole.getScopes());
 
-            // Copy policies
             List<ResourcePolicyModel> policies = runtimeRole.getResourcePolicies().stream()
                     .map(p -> {
                         ResourcePolicyModel m = new ResourcePolicyModel();
@@ -984,14 +978,21 @@
                         m.setResource(p.getResource());
                         m.setAction(p.getAction());
                         m.setEffect(p.getEffect());
-                        m.setPolicyGroup(p.getPolicyGroup());
+
+                        // ✅ AUTO SET POLICY GROUP (nếu trống)
+                        String group = p.getPolicyGroup();
+                        if (group == null || group.isBlank()) {
+                            group = p.getResource();
+                        }
+                        m.setPolicyGroup(group);
+
                         return m;
                     })
                     .collect(Collectors.toList());
 
             model.setResourcePolicies(policies);
-
             return model;
         }
+
 
     }
