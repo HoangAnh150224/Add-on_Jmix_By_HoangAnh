@@ -80,7 +80,9 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
         suppressAllowAllEvent = true;
         allowAllViews.setValue(hasAllowAll);
         suppressAllowAllEvent = false;
-
+        if (hasAllowAll) {
+            applyAllowAll(true);    // 🔥 ép tất cả leaf hiển thị Allow
+        }
         allowAllViews.addValueChangeListener(e -> {
             if (!e.isFromClient() || suppressAllowAllEvent)
                 return;
