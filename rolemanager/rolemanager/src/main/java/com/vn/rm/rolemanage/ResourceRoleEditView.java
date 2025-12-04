@@ -47,6 +47,7 @@ public class ResourceRoleEditView extends StandardDetailView<ResourceRoleModel> 
     @ViewComponent
     private JmixCheckboxGroup<String> scopesField;
 
+    public static final String ROUTE_PARAM_NAME = "code";
     @ViewComponent
     private DataContext dataContext;
     @ViewComponent

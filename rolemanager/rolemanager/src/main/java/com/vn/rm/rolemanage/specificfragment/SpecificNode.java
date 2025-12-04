@@ -46,4 +46,5 @@ public class SpecificNode {
 
     public Boolean getDeny() { return deny; }
     public void setDeny(Boolean deny) { this.deny = deny; }
+
 }

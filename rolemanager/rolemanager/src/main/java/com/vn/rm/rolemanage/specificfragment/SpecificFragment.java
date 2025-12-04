@@ -74,6 +74,9 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
         suppressAllowAll = true;
         allowAllSpecific.setValue(hasAllowAll);
         suppressAllowAll = false;
+        if (hasAllowAll) {
+            applyAllowAll(true);    // 🔥 ép tất cả leaf hiển thị Allow
+        }
 
         allowAllSpecific.setEnabled(editable);
 
@@ -220,7 +223,7 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
             if (!"specific".equalsIgnoreCase(p.getType()))
                 continue;
 
-            if (!"execute".equalsIgnoreCase(p.getAction()))
+            if (!"Access".equalsIgnoreCase(p.getAction()))
                 continue;
 
             if (!leaf.getName().equals(p.getResource()))
@@ -356,7 +359,7 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
         List<ResourcePolicyModel> out = new ArrayList<>();
 
         if (Boolean.TRUE.equals(allowAllSpecific.getValue())) {
-            out.add(roleManagerService.createPolicy("specific", "*", "access"));
+            out.add(roleManagerService.createPolicy("specific", "*", "Access"));
             return out;
         }
 
@@ -369,7 +372,7 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
                 out.add(roleManagerService.createPolicy(
                         "specific",
                         leaf.getName(),
-                        "access"
+                        "Access"
                 ));
             }
         }
