@@ -88,11 +88,6 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
         });
     }
 
-
-    private boolean isAllowAllViewsChecked() {
-        return Boolean.TRUE.equals(allowAllViews.getValue());
-    }
-
     // ===============================================
     // ALLOW ALL
     // ===============================================
@@ -146,41 +141,41 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
     }
 
 
-        private void applyDbPolicies(ResourceRoleModel model) {
+    private void applyDbPolicies(ResourceRoleModel model) {
+        for (ResourcePolicyModel p : model.getResourcePolicies()) {
 
-            for (ResourcePolicyModel p : model.getResourcePolicies()) {
+            if (!ResourcePolicyEffect.ALLOW.equalsIgnoreCase(p.getEffect()))
+                continue;
 
-                if (!ResourcePolicyEffect.ALLOW.equalsIgnoreCase(p.getEffect()))
-                    continue;
+            if ("*".equals(p.getResource())) {
+                suppressAllowAllEvent = true;
+                allowAllViews.setValue(true);
+                suppressAllowAllEvent = false;
+                applyAllowAll(true);
+                continue;
+            }
 
-                if ("*".equals(p.getResource())) {
-                    suppressAllowAllEvent = true;
-                    allowAllViews.setValue(true);
-                    suppressAllowAllEvent = false;
-                    applyAllowAll(true);
-                    continue;
-                }
+            // DÙNG type thật sự thay vì ép "screen"
+            String key = roleManagerService.buildLeafKey(
+                    p.getResource(),
+                    p.getAction() == null ? "Access" : p.getAction(),
+                    p.getType()
+            );
 
-                // Annotated CHỈ apply vào screen
-                String key = roleManagerService.buildLeafKey(
-                        p.getResource(),
-                        "Access",
-                        "screen"
-                );
+            List<PolicyGroupNode> nodes = roleManagerService.getNodesByKey(key);
+            if (nodes == null) continue;
 
-                List<PolicyGroupNode> nodes = roleManagerService.getNodesByKey(key);
-                if (nodes == null) continue;
+            for (PolicyGroupNode n : nodes) {
+                if (!p.getType().equalsIgnoreCase(n.getType()))
+                    continue; // chỉ apply đúng loại (screen/menu)
 
-                for (PolicyGroupNode n : nodes) {
-                    if (!"screen".equalsIgnoreCase(n.getType()))
-                        continue; // tuyệt đối không apply vào menu
-
-                    n.setAnnotated(true);
-                    roleManagerService.applyState(n, true);
-                    n.setDenyDefault(false);
-                }
+                // ❌ KHÔNG set annotated ở DB
+                roleManagerService.applyState(n, true);
+                n.setDenyDefault(false);
             }
         }
+    }
+
 
 
     private void applyAnnotated(ResourceRoleModel model)  {
