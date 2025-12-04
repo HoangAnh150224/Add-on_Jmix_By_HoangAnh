@@ -140,22 +140,28 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
         policyTreeGrid.setItems(Arrays.asList(viewRoot, menuRoot), PolicyGroupNode::getChildren);
     }
 
-
     private void applyDbPolicies(ResourceRoleModel model) {
+
+        // Không làm gì nếu model null hoặc không có policy
+        if (model == null || model.getResourcePolicies() == null)
+            return;
+
         for (ResourcePolicyModel p : model.getResourcePolicies()) {
 
+            // chỉ xử lý policy ALLOW
             if (!ResourcePolicyEffect.ALLOW.equalsIgnoreCase(p.getEffect()))
                 continue;
 
+            // Nếu là wildcard (*), chỉ hiển thị "Allow All" trên UI
             if ("*".equals(p.getResource())) {
                 suppressAllowAllEvent = true;
                 allowAllViews.setValue(true);
                 suppressAllowAllEvent = false;
-                applyAllowAll(true);
+                // ❌ Không gọi applyAllowAll(true) — tránh ép toàn bộ node Allow
                 continue;
             }
 
-            // DÙNG type thật sự thay vì ép "screen"
+            // Xây key theo đúng type
             String key = roleManagerService.buildLeafKey(
                     p.getResource(),
                     p.getAction() == null ? "Access" : p.getAction(),
@@ -163,18 +169,28 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
             );
 
             List<PolicyGroupNode> nodes = roleManagerService.getNodesByKey(key);
-            if (nodes == null) continue;
+            if (nodes == null || nodes.isEmpty())
+                continue;
 
             for (PolicyGroupNode n : nodes) {
+                // Chỉ apply đúng type (menu ↔ menu, screen ↔ screen)
                 if (!p.getType().equalsIgnoreCase(n.getType()))
-                    continue; // chỉ apply đúng loại (screen/menu)
+                    continue;
 
-                // ❌ KHÔNG set annotated ở DB
+                // ⚠️ Không động vào annotated node (tức annotated = true)
+                if (Boolean.TRUE.equals(n.getAnnotated()))
+                    continue;
+
+                // ✅ Apply state cho node DB
                 roleManagerService.applyState(n, true);
                 n.setDenyDefault(false);
             }
         }
+
+        // ✅ Refresh UI để update checkbox
+        policyTreeGrid.getDataProvider().refreshAll();
     }
+
 
 
 
