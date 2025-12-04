@@ -546,7 +546,8 @@
 
         private void addLeaf(PolicyGroupNode parent, String viewId, String meta, List<MenuItem> menuItems) {
 
-            boolean isAnnotated = isAnnotatedView(viewId);
+            boolean isAnnotatedScreen = isAnnotatedView(viewId);
+            boolean isAnnotatedMenu = isAnnotatedMenu(viewId);
 
             // -------------------------------------------------------
             // CASE 1: View NẰM TRONG MENU → tạo MENU leaf + VIEW leaf
@@ -563,9 +564,9 @@
 
                     PolicyGroupNode allowMenu = new PolicyGroupNode(caption, false);
                     allowMenu.setType("menu");
-                    allowMenu.setResource(viewId);      // ✔ MUST USE VIEW ID (sync key)
+                    allowMenu.setResource(viewId);      // MUST USE VIEW ID (sync key)
                     allowMenu.setAction("Access");
-                    allowMenu.setAnnotated(isAnnotated);
+                    allowMenu.setAnnotated(isAnnotatedMenu); // ✅ dùng đúng biến
                     allowMenu.setParent(parent);
 
                     parent.getChildren().add(allowMenu);
@@ -574,10 +575,10 @@
                 // VIEW leaf
                 PolicyGroupNode allowView = new PolicyGroupNode("View: " + viewId, false);
                 allowView.setType("screen");
-                allowView.setResource(viewId);          // ✔ same key
+                allowView.setResource(viewId);          // same key
                 allowView.setAction("Access");
                 allowView.setMeta(meta);
-                allowView.setAnnotated(isAnnotated);
+                allowView.setAnnotated(isAnnotatedScreen); // ✅ dùng đúng biến
                 allowView.setParent(parent);
 
                 parent.getChildren().add(allowView);
@@ -592,11 +593,12 @@
             leaf.setResource(viewId);
             leaf.setAction("Access");
             leaf.setMeta(meta);
-            leaf.setAnnotated(isAnnotated);
+            leaf.setAnnotated(isAnnotatedScreen); // ✅ dùng đúng biến
             leaf.setParent(parent);
 
             parent.getChildren().add(leaf);
         }
+
 
 
         /**
@@ -805,6 +807,7 @@
             // ================================
             if (isMenu) {
                 for (PolicyGroupNode target : linked) {
+
                     if ("menu".equalsIgnoreCase(target.getType())) {
                         // MENU ↔ MENU sync đầy đủ
                         target.setEffect(allow ? "ALLOW" : null);
@@ -832,7 +835,9 @@
             // CASE 2: VIEW → chỉ sync VIEW ↔ VIEW
             // ================================
             if (isView) {
+
                 for (PolicyGroupNode target : linked) {
+
                     if ("screen".equalsIgnoreCase(target.getType())) {
                         target.setEffect(allow ? "ALLOW" : null);
                         target.setAllow(allow);
@@ -944,6 +949,17 @@
                     .anyMatch(p ->
                             ResourcePolicyEffect.ALLOW.equals(p.getEffect())
                                     && "screen".equalsIgnoreCase(p.getType())
+                                    && ("*".equals(p.getResource()) || p.getResource().equals(viewId))
+                    );
+        }
+        private boolean isAnnotatedMenu(String viewId) {
+            if (annotatedRole == null)
+                return false;
+
+            return annotatedRole.getResourcePolicies().stream()
+                    .anyMatch(p ->
+                            ResourcePolicyEffect.ALLOW.equals(p.getEffect())
+                                    && "menu".equalsIgnoreCase(p.getType())
                                     && ("*".equals(p.getResource()) || p.getResource().equals(viewId))
                     );
         }

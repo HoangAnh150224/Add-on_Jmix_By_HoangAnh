@@ -9,10 +9,10 @@ import io.jmix.securityflowui.role.annotation.ViewPolicy;
 public interface TestRole {
     String CODE = "test";
 
-    @MenuPolicy(menuIds = "*")
-    @ViewPolicy(viewIds = "*")
-    void screens();
-
     @SpecificPolicy(resources = "*")
     void specific();
+
+    @MenuPolicy(menuIds = "User.list")
+    @ViewPolicy(viewIds = "User.list")
+    void screens();
 }

@@ -20,7 +20,7 @@ public class PolicyGroupNode {
     private Boolean deny;
 
     private Boolean denyDefault = false;
-    private Boolean annotated = false;
+        private Boolean annotated=false ;
 
     private PolicyGroupNode parent;
     private List<PolicyGroupNode> children = new ArrayList<>();
@@ -64,16 +64,15 @@ public class PolicyGroupNode {
     public Boolean isLeaf() { return !group; }
 
     public void resetState() {
-        // ✔ KHÔNG được deny
         if (Boolean.TRUE.equals(annotated)) {
-            // Annotated → ALLOW
             this.effect = "ALLOW";
             this.allow = true;
         } else {
-            // Không annotated → TRẠNG THÁI TRỐNG (neutral)
             this.effect = null;
             this.allow = false;
         }
-        this.deny = false;
+        this.deny = false; // ép về allow
     }
+
+
 }
