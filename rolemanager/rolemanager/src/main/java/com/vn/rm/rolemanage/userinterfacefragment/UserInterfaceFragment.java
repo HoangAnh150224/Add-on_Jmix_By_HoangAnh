@@ -361,26 +361,35 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
         if (node.isLeaf() && "ALLOW".equals(node.getEffect())) {
 
             String key = node.getType() + "|" + node.getResource() + "|" + node.getAction();
-
-            if (!unique.contains(key)) {
-
-                unique.add(key);
-
-                // MUST USE metadata.create → Model needs internal meta config
-                ResourcePolicyModel p = metadata.create(ResourcePolicyModel.class);
-                p.setId(UUID.randomUUID());              // 👈 FIX: REQUIRED
-                p.setType(node.getType());
-                p.setResource(node.getResource());
-                p.setAction(node.getAction());
-                p.setEffect("ALLOW");
-
-                out.add(p);
+            if (!unique.add(key)) {
+                return; // tránh trùng lặp
             }
+
+            // ✅ Chuẩn hoá action cho screen/menu
+
+            // ✅ Dùng metadata để tạo model
+            ResourcePolicyModel p = metadata.create(ResourcePolicyModel.class);
+            p.setId(UUID.randomUUID());
+            p.setType(node.getType());
+            p.setResource(node.getResource());
+            p.setAction(node.getAction());
+            p.setEffect(ResourcePolicyEffect.ALLOW);
+
+            // ✅ Gán Policy Group hợp lệ (giúp UI Resource Role Editor hiển thị đúng)
+            String group = node.getResource();
+            if (group != null && group.endsWith("*")) {
+                group = null;
+            }
+            p.setPolicyGroup(group);
+
+            out.add(p);
         }
 
+        // Duyệt đệ quy con
         for (PolicyGroupNode c : node.getChildren()) {
             collectUnique(c, out, unique);
         }
     }
+
 
 }

@@ -4,6 +4,7 @@ import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vn.rm.rolemanage.service.RoleManagerService;
+import io.jmix.core.Metadata;
 import io.jmix.core.accesscontext.SpecificOperationAccessContext;
 import io.jmix.core.security.SpecificPolicyInfoRegistry;
 import io.jmix.core.security.SpecificPolicyInfoRegistry.SpecificPolicyInfo;
@@ -42,8 +43,8 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
     private Checkbox allowAllSpecific;
 
     private boolean suppressAllowAll = false;
-
-
+    @Autowired
+    private Metadata metadata;
     // ======================================================================
     // INIT — MAIN ENTRY
     // ======================================================================
@@ -338,46 +339,66 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
         return className;
     }
 
-    private String extractLeaf(String id) {
-        if (id == null) return id;
-
-        int lastDot = id.lastIndexOf('.');
-        if (lastDot < 0) return id;
-
-        return id.substring(lastDot + 1);
-    }
-
-
-
-
 
     // ======================================================================
-    // COLLECT POLICIES
-    // ======================================================================
+// COLLECT POLICIES (SAVE TO DB) - đồng nhất với UserInterfaceFragment
+// ======================================================================
     public List<ResourcePolicyModel> collectSpecificPolicies() {
 
         List<ResourcePolicyModel> out = new ArrayList<>();
+        Set<String> unique = new HashSet<>();
 
+        // ---- CASE 1: Allow all ----
         if (Boolean.TRUE.equals(allowAllSpecific.getValue())) {
-            out.add(roleManagerService.createPolicy("specific", "*", "Access"));
+            ResourcePolicyModel all = metadata.create(ResourcePolicyModel.class);
+            all.setId(UUID.randomUUID());
+            all.setType("specific");
+            all.setResource("*");
+            all.setAction("Access");
+            all.setEffect(ResourcePolicyEffect.ALLOW);
+            all.setPolicyGroup("*"); // ✅ hiển thị group wildcard
+            out.add(all);
             return out;
         }
 
+        // ---- CASE 2: Collect từng leaf ----
         for (SpecificNode group : specificDc.getItems()) {
             for (SpecificNode leaf : group.getChildren()) {
 
+                // chỉ xử lý leaf được Allow
                 if (!"ALLOW".equals(leaf.getEffect()))
                     continue;
 
-                out.add(roleManagerService.createPolicy(
-                        "specific",
-                        leaf.getName(),
-                        "Access"
-                ));
+                // tạo key duy nhất để tránh trùng lặp
+                String key = "specific|" + leaf.getName() + "|Access";
+                if (!unique.add(key)) {
+                    continue;
+                }
+
+                // ✅ tạo model đúng metadata
+                ResourcePolicyModel p = metadata.create(ResourcePolicyModel.class);
+                p.setId(UUID.randomUUID());
+                p.setType("specific");
+                p.setResource(leaf.getName());
+                p.setAction("Access");
+                p.setEffect(ResourcePolicyEffect.ALLOW);
+
+                // ✅ gán policy group = group name (nếu có)
+                String groupName = group.getName();
+                if (groupName != null && !groupName.isBlank()) {
+                    p.setPolicyGroup(groupName);
+                } else {
+                    p.setPolicyGroup(leaf.getName());
+                }
+
+                out.add(p);
             }
         }
+
         return out;
     }
+
+
 
 
 }
