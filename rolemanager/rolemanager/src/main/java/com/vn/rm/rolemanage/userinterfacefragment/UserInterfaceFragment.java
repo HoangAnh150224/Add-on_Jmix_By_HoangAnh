@@ -116,8 +116,8 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
 
         Map<String, List<MenuItem>> vmMap = roleManagerService.buildViewMenuMap();
 
-        PolicyGroupNode viewRoot = new PolicyGroupNode("View Access", true);
-        PolicyGroupNode menuRoot = new PolicyGroupNode("Menu Access", true);
+        PolicyGroupNode viewRoot = new PolicyGroupNode("Tất cả màn hình", true);
+        PolicyGroupNode menuRoot = new PolicyGroupNode("Màn hình chính", true);
 
         roleManagerService.buildViewsTree(viewRoot, vmMap);
         viewRoot = roleManagerService.compress(viewRoot);
@@ -243,15 +243,15 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
         policyTreeGrid.removeAllColumns();
 
         policyTreeGrid.addHierarchyColumn(n -> n.getName())
-                .setHeader("Resource")
+                .setHeader("Tài nguyên")
                 .setFlexGrow(4);
 
         policyTreeGrid.addColumn(PolicyGroupNode::getType)
-                .setHeader("Type")
+                .setHeader("Thể loại")
                 .setTextAlign(ColumnTextAlign.CENTER);
 
         policyTreeGrid.addColumn(PolicyGroupNode::getAction)
-                .setHeader("Action")
+                .setHeader("Hành động")
                 .setTextAlign(ColumnTextAlign.CENTER);
 
         // ============================
@@ -277,7 +277,7 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
             });
 
 
-        })).setHeader("Allow");
+        })).setHeader("Cho phép");
 
 // ============================
 // DENY COLUMN
@@ -325,7 +325,7 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
             });
 
 
-        })).setHeader("Deny");
+        })).setHeader("Khóa");
 
     }
 
