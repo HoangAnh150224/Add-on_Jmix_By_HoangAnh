@@ -6,6 +6,8 @@
     <data readOnly="true">
         <collection id="roleModelsDc"
                     class="io.jmix.security.model.ResourceRoleModel">
+            <loader id="roleModelsDl"/>
+
         </collection>
     </data>
 
@@ -20,7 +22,15 @@
 
     <layout expand="roleModelsTable">
         <hbox id="buttonsPanel" classNames="buttons-panel">
-
+            <textField id="nameFilterField"
+                       placeholder="Tìm theo tên..."
+                       width="20em"
+                       clearButtonVisible="true"
+                       valueChangeMode="EAGER">
+                <prefix>
+                    <icon icon="SEARCH"/>
+                </prefix>
+            </textField>
             <button id="removeBtn" action="roleModelsTable.remove"/>
             <button id="assignToUsersBtn" action="roleModelsTable.assignToUsers"/>
 
