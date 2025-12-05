@@ -12,7 +12,7 @@
         <vbox id="policyBox" padding="true" spacing="true">
             <hbox spacing="true" alignItems="CENTER">
 <!--                <checkbox id="showAssignedOnly" label="Show Assigned Only"/>-->
-                <checkbox id="allowAllViews" label="Allow all views"/>
+                <checkbox id="allowAllViews" label="Cho phép tất cả màn hình"/>
             </hbox>
 
             <h3>Resource Policies (Tree)</h3>

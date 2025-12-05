@@ -13,18 +13,12 @@
     <content>
         <vbox id="root" spacing="true" padding="true">
             <hbox spacing="10px" classNames="mb-m">
-                <checkbox id="allowAllSpecific" label="Allow all permissions"/>
+                <checkbox id="allowAllSpecific" label="Cho phép tất cả các quyền"/>
             </hbox>
             <treeDataGrid id="specificTree"
                           width="100%"
                           dataContainer="specificDc"
                           hierarchyProperty="children">
-
-                <columns>
-                    <column property="name"
-                            header="Permission"
-                            />
-                </columns>
 
             </treeDataGrid>
 

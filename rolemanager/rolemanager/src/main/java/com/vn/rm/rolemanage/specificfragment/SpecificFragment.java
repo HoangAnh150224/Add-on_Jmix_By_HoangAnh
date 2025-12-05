@@ -254,7 +254,7 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
         specificTree.removeAllColumns();
 
         specificTree.addHierarchyColumn(SpecificNode::getName)
-                .setHeader("Permission");
+                .setHeader("Quyền hạn");
 
         // ALLOW
         specificTree.addColumn(new ComponentRenderer<>(Checkbox::new, (cb, node) -> {
@@ -275,7 +275,6 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
                     node.setAllow(true);
                     node.setDeny(false);
                 } else {
-                    // ❌ Bỏ tick Allow → phải tắt AllowAll
                     suppressAllowAll = true;
                     allowAllSpecific.setValue(false);
                     suppressAllowAll = false;
@@ -289,7 +288,7 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
             });
 
 
-        })).setHeader("Allow");
+        })).setHeader("Cho Phép");
 
         // DENY
         specificTree.addColumn(new ComponentRenderer<>(Checkbox::new, (cb, node) -> {
@@ -324,7 +323,7 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
                 specificTree.getDataProvider().refreshAll();
             });
 
-        })).setHeader("Deny");
+        })).setHeader("Khóa");
     }
 
 

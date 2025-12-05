@@ -24,7 +24,7 @@
             <button id="removeBtn" action="roleModelsTable.remove"/>
             <button id="assignToUsersBtn" action="roleModelsTable.assignToUsers"/>
 
-            <dropdownButton id="exportBtn" text="msg://exportMenu.text" icon="DOWNLOAD">
+            <dropdownButton id="exportBtn" text="Xuất file" icon="DOWNLOAD">
                 <items>
                     <actionItem id="exportJSONItem" ref="roleModelsTable.exportJSON"/>
                     <actionItem id="exportZIPItem" ref="roleModelsTable.exportZIP"/>
@@ -33,7 +33,7 @@
 
             <fileUploadField id="importField"
                              uploadIcon="UPLOAD"
-                             uploadText="msg://importMenu.text"
+                             uploadText="Nhập file"
                              acceptedFileTypes=".json,.zip"/>
 
             <!-- Nút custom -->
@@ -51,10 +51,10 @@
                 <action id="create" type="list_create"/>
                 <action id="edit"   type="list_edit"/>
 
-                <action id="remove"        type="list_remove"/>
-                <action id="assignToUsers" type="sec_assignToUsers"/>
-                <action id="exportJSON"    text="msg://actions.exportJSON"/>
-                <action id="exportZIP"     text="msg://actions.exportZIP"/>
+                <action id="remove"   type="list_remove" text="Xóa quyền"/>
+                <action id="assignToUsers" type="sec_assignToUsers" text="Gán quyền cho người dùng"/>
+                <action id="exportJSON"    text="Xuất JSON"/>
+                <action id="exportZIP"     text="Xuất ZIP"/>
 
                 <!-- Action custom, dùng cho 2 nút trên -->
                 <action id="createCustomRole"
