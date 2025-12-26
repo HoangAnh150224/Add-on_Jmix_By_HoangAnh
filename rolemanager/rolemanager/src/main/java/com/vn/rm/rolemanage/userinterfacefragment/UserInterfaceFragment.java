@@ -262,74 +262,92 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
             cb.setValue("ALLOW".equals(node.getEffect()));
 
             boolean locked = roleManagerService.isViewLockedByMenu(node);
-
-            if (locked) {
-                cb.setEnabled(false);       // 🔒 khóa khi MENU = ALLOW
-            } else {
-                cb.setEnabled(editable);    // mở bình thường
-            }
+            cb.setEnabled(!locked && editable);
 
             cb.addValueChangeListener(e -> {
                 if (!e.isFromClient() || locked) return;
 
-                roleManagerService.syncLinkedLeaves(node, e.getValue());
-                policyTreeGrid.getDataProvider().refreshAll();
+                // ĐỒNG BỘ TRẠNG THÁI NGAY TRÊN NODE
+                boolean isAllow = Boolean.TRUE.equals(e.getValue());
+                if (isAllow) {
+                    node.setEffect("ALLOW");
+                    node.setAllow(true);
+                    node.setDeny(false);
+                } else {
+                    node.setEffect(null);
+                    node.setAllow(false);
+                    node.setDeny(true);
+
+                    // Bỏ tick "Allow All" nếu người dùng bỏ tick một quyền bất kỳ
+                    suppressAllowAllEvent = true;
+                    allowAllViews.setValue(false);
+                    suppressAllowAllEvent = false;
+                }
+
+                // 1. Cập nhật logic nghiệp vụ (đồng bộ Menu <-> Screen trong database/service)
+                roleManagerService.syncLinkedLeaves(node, isAllow);
+
+                // 2. Refresh các node bị ảnh hưởng để cập nhật cả cột ALLOW và DENY
+                refreshAffectedNodes(node);
             });
-
-
         })).setHeader("Cho phép");
 
-// ============================
-// DENY COLUMN
-// ============================
+        // ============================
+        // CỘT KHÓA (DENY)
+        // ============================
         policyTreeGrid.addColumn(new ComponentRenderer<>(Checkbox::new, (cb, node) -> {
-
             cb.setVisible(node.isLeaf());
             cb.setValue(!"ALLOW".equals(node.getEffect()));
 
             boolean locked = roleManagerService.isViewLockedByMenu(node);
-
-            if (locked) {
-                cb.setEnabled(false);       // 🔒 khóa deny khi screen bị ép allow
-            } else {
-                cb.setEnabled(editable);
-            }
+            cb.setEnabled(!locked && editable);
 
             cb.addValueChangeListener(e -> {
                 if (!e.isFromClient() || locked) return;
 
-                boolean deny = e.getValue();
-                boolean allow = !deny;
-                boolean checked = Boolean.TRUE.equals(e.getValue());
-
-                if (checked) {
-                    // ✔ Tick Deny → xoá allow
-                    node.setEffect(null);    // xoá khỏi DB
+                // ĐỒNG BỘ TRẠNG THÁI NGAY TRÊN NODE
+                boolean isDeny = Boolean.TRUE.equals(e.getValue());
+                if (isDeny) {
+                    node.setEffect(null);
                     node.setAllow(false);
                     node.setDeny(true);
 
-                    // ✔ bỏ tick Allow All nếu đang bật
                     suppressAllowAllEvent = true;
                     allowAllViews.setValue(false);
                     suppressAllowAllEvent = false;
-
                 } else {
-                    // ❗ Bỏ deny → luôn bật Allow
                     node.setEffect("ALLOW");
                     node.setAllow(true);
                     node.setDeny(false);
                 }
 
-                roleManagerService.syncLinkedLeaves(node, allow);
-                policyTreeGrid.getDataProvider().refreshAll();
+                // 1. Cập nhật logic nghiệp vụ (Nếu Deny = true thì Allow = false)
+                roleManagerService.syncLinkedLeaves(node, !isDeny);
+
+                // 2. Refresh các node bị ảnh hưởng
+                refreshAffectedNodes(node);
             });
-
-
         })).setHeader("Khóa");
 
     }
+    private void refreshAffectedNodes(PolicyGroupNode currentNode) {
+        if (currentNode == null || currentNode.getResource() == null) return;
 
+        String resourceName = currentNode.getResource();
 
+        // Duyệt qua toàn bộ danh sách các node đã được index
+        for (PolicyGroupNode leaf : roleManagerService.getAllIndexedLeaves()) {
+            // Nếu node đó có cùng tên tài nguyên (Resource)
+            if (resourceName.equals(leaf.getResource())) {
+
+                // CHỈ RA LỆNH VẼ LẠI (REFRESH)
+                // Không dùng setEffect hay setAllow ở đây nữa.
+                // Grid sẽ tự gọi lại renderer và đọc dữ liệu mới nhất từ đối tượng leaf
+                // mà Service syncLinkedLeaves đã cập nhật trước đó.
+                policyTreeGrid.getDataProvider().refreshItem(leaf);
+            }
+        }
+    }
     // ===============================================
     // COLLECT POLICIES
     // ===============================================

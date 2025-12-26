@@ -250,15 +250,15 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
     // GRID RENDER
     // ======================================================================
     private void setupGrid(boolean editable) {
-
         specificTree.removeAllColumns();
 
         specificTree.addHierarchyColumn(SpecificNode::getName)
                 .setHeader("Quyền hạn");
 
-        // ALLOW
+        // ============================
+        // CỘT CHO PHÉP (ALLOW)
+        // ============================
         specificTree.addColumn(new ComponentRenderer<>(Checkbox::new, (cb, node) -> {
-
             boolean locked = Boolean.TRUE.equals(node.getAnnotated());
             cb.setVisible(node.isLeaf());
             cb.setEnabled(editable && !locked);
@@ -275,24 +275,29 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
                     node.setAllow(true);
                     node.setDeny(false);
                 } else {
-                    suppressAllowAll = true;
-                    allowAllSpecific.setValue(false);
-                    suppressAllowAll = false;
-
+                    // Nếu bỏ chọn Allow -> tự động thành Deny
                     node.setEffect(null);
                     node.setAllow(false);
                     node.setDeny(true);
+
+                    // Đồng bộ với checkbox "Allow All" ở phía trên
+                    if (Boolean.TRUE.equals(allowAllSpecific.getValue())) {
+                        suppressAllowAll = true;
+                        allowAllSpecific.setValue(false);
+                        suppressAllowAll = false;
+                    }
                 }
 
-                specificTree.getDataProvider().refreshAll();
+                // CHỈ LÀM MỚI DÒNG HIỆN TẠI (Không gây nhảy trang)
+                specificTree.getDataProvider().refreshItem(node);
             });
-
 
         })).setHeader("Cho Phép");
 
-        // DENY
+        // ============================
+        // CỘT KHÓA (DENY)
+        // ============================
         specificTree.addColumn(new ComponentRenderer<>(Checkbox::new, (cb, node) -> {
-
             boolean locked = Boolean.TRUE.equals(node.getAnnotated());
             cb.setVisible(node.isLeaf());
             cb.setEnabled(editable && !locked);
@@ -302,25 +307,28 @@ public class SpecificFragment extends Fragment<VerticalLayout> {
             cb.addValueChangeListener(e -> {
                 if (!e.isFromClient()) return;
 
-                boolean checked = Boolean.TRUE.equals(e.getValue());
+                boolean isDeny = Boolean.TRUE.equals(e.getValue());
 
-                if (checked) {
-
-                    suppressAllowAll = true;
-                    allowAllSpecific.setValue(false);
-                    suppressAllowAll = false;
-
+                if (isDeny) {
                     node.setEffect(null);
                     node.setAllow(false);
                     node.setDeny(true);
-                }
-                else {
+
+                    // Nếu tick chọn Khóa -> phải tắt "Allow All"
+                    if (Boolean.TRUE.equals(allowAllSpecific.getValue())) {
+                        suppressAllowAll = true;
+                        allowAllSpecific.setValue(false);
+                        suppressAllowAll = false;
+                    }
+                } else {
+                    // Nếu bỏ chọn Khóa -> tự động thành Allow
                     node.setEffect("ALLOW");
                     node.setAllow(true);
                     node.setDeny(false);
                 }
 
-                specificTree.getDataProvider().refreshAll();
+                // CHỈ LÀM MỚI DÒNG HIỆN TẠI (Không gây nhảy trang)
+                specificTree.getDataProvider().refreshItem(node);
             });
 
         })).setHeader("Khóa");

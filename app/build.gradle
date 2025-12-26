@@ -12,7 +12,7 @@ jmix {
 }
 
 group = 'com.vn'
-version = '0.0.1-SNAPSHOT'
+version = '01-VN'
 
 repositories {
     mavenLocal()
@@ -23,7 +23,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.vn:rolemanager-starter:0.0.1-SNAPSHOT'
+    implementation 'com.vn:rolemanager-starter:01-VN'
 
 
     implementation 'io.jmix.core:jmix-core-starter'
