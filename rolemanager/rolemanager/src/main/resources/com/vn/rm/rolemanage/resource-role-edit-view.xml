@@ -1,5 +1,5 @@
 <view xmlns="http://jmix.io/schema/flowui/view"
-      title="Resource Role Editor">
+      title="Thiết lập quyền">
 
     <data>
         <instance id="roleModelDc" class="io.jmix.security.model.ResourceRoleModel">

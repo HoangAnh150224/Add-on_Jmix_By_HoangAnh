@@ -8,7 +8,7 @@ buildscript {
 }
 
 group = 'com.vn'
-version = '01-VN'
+version = '01-QLPV-SNAPSHOT'
 
 subprojects {
     apply plugin: 'java-library'

@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 
 import static io.jmix.flowui.view.StandardDetailView.NEW_ENTITY_ID;
 
-@Route(value = "sec/extresourcerolemodels", layout = DefaultMainViewParent.class)
+@Route(value = "danhmuc-menu/sec/extresourcerolemodels", layout = DefaultMainViewParent.class)
 @ViewController(id = "ext_sec_ResourceRoleModel.list")
 @ViewDescriptor(path = "ext-resource-role-model-list-view.xml")
 @LookupComponent("roleModelsTable")

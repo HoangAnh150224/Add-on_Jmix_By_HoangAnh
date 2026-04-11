@@ -32,7 +32,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Route(value = "sec/resource-role-edit-view/:code", layout = DefaultMainViewParent.class)
+@Route(value = "danhmuc-menu/sec/resource-role-edit-view/:code", layout = DefaultMainViewParent.class)
 @ViewController("rm_ResourceRoleEditView")
 @ViewDescriptor("resource-role-edit-view.xml")
 @EditedEntityContainer("roleModelDc")
