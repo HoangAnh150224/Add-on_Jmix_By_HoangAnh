@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<menu-config xmlns="http://jmix.io/schema/flowui/menu">
+    <item view="ext_sec_ResourceRoleModel.list"
+          description="RoleManager"
+          title="RoleManager" icon="vaadin:abacus"/>
+    <menu id="rm" title="msg://com.vn.rm/menu.addon"/>
+
+</menu-config>

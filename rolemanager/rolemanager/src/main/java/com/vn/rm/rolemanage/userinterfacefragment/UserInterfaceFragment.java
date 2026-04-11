@@ -11,6 +11,8 @@ import io.jmix.flowui.fragment.Fragment;
 import io.jmix.flowui.fragment.FragmentDescriptor;
 import io.jmix.flowui.model.CollectionContainer;
 import io.jmix.flowui.menu.MenuItem;
+import io.jmix.flowui.view.Subscribe;
+import io.jmix.flowui.view.Target;
 import io.jmix.flowui.view.ViewComponent;
 import io.jmix.security.model.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -144,22 +146,18 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
 
     private void applyDbPolicies(ResourceRoleModel model) {
 
-        // Không làm gì nếu model null hoặc không có policy
         if (model == null || model.getResourcePolicies() == null)
             return;
 
         for (ResourcePolicyModel p : model.getResourcePolicies()) {
 
-            // chỉ xử lý policy ALLOW
             if (!ResourcePolicyEffect.ALLOW.equalsIgnoreCase(p.getEffect()))
                 continue;
 
-            // Nếu là wildcard (*), chỉ hiển thị "Allow All" trên UI
             if ("*".equals(p.getResource())) {
                 suppressAllowAllEvent = true;
                 allowAllViews.setValue(true);
                 suppressAllowAllEvent = false;
-                // ❌ Không gọi applyAllowAll(true) — tránh ép toàn bộ node Allow
                 continue;
             }
 
@@ -244,14 +242,18 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
 
         policyTreeGrid.addHierarchyColumn(n -> n.getName())
                 .setHeader("Tài nguyên")
-                .setFlexGrow(4);
+                .setFlexGrow(5);
 
         policyTreeGrid.addColumn(PolicyGroupNode::getType)
                 .setHeader("Thể loại")
+                .setFlexGrow(0)
+                .setAutoWidth(true)// Không cho phép giãn thêm
                 .setTextAlign(ColumnTextAlign.CENTER);
 
         policyTreeGrid.addColumn(PolicyGroupNode::getAction)
                 .setHeader("Hành động")
+                .setFlexGrow(0)      // Không cho phép giãn thêm
+                .setAutoWidth(true)
                 .setTextAlign(ColumnTextAlign.CENTER);
 
         // ============================
@@ -290,7 +292,11 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
                 // 2. Refresh các node bị ảnh hưởng để cập nhật cả cột ALLOW và DENY
                 refreshAffectedNodes(node);
             });
-        })).setHeader("Cho phép");
+        })).setHeader("Cho phép")
+                .setFlexGrow(0)
+                .setTextAlign(ColumnTextAlign.CENTER)
+                .setWidth("110px")
+        ;
 
         // ============================
         // CỘT KHÓA (DENY)
@@ -327,7 +333,10 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
                 // 2. Refresh các node bị ảnh hưởng
                 refreshAffectedNodes(node);
             });
-        })).setHeader("Khóa");
+        })).setHeader("Khóa")
+                .setTextAlign(ColumnTextAlign.CENTER)
+                .setFlexGrow(0)
+                .setWidth("100px");
 
     }
     private void refreshAffectedNodes(PolicyGroupNode currentNode) {
@@ -335,15 +344,9 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
 
         String resourceName = currentNode.getResource();
 
-        // Duyệt qua toàn bộ danh sách các node đã được index
         for (PolicyGroupNode leaf : roleManagerService.getAllIndexedLeaves()) {
-            // Nếu node đó có cùng tên tài nguyên (Resource)
             if (resourceName.equals(leaf.getResource())) {
 
-                // CHỈ RA LỆNH VẼ LẠI (REFRESH)
-                // Không dùng setEffect hay setAllow ở đây nữa.
-                // Grid sẽ tự gọi lại renderer và đọc dữ liệu mới nhất từ đối tượng leaf
-                // mà Service syncLinkedLeaves đã cập nhật trước đó.
                 policyTreeGrid.getDataProvider().refreshItem(leaf);
             }
         }
@@ -383,9 +386,6 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
                 return; // tránh trùng lặp
             }
 
-            // ✅ Chuẩn hoá action cho screen/menu
-
-            // ✅ Dùng metadata để tạo model
             ResourcePolicyModel p = metadata.create(ResourcePolicyModel.class);
             p.setId(UUID.randomUUID());
             p.setType(node.getType());
@@ -407,6 +407,11 @@ public class UserInterfaceFragment extends Fragment<VerticalLayout> {
         for (PolicyGroupNode c : node.getChildren()) {
             collectUnique(c, out, unique);
         }
+    }
+
+    @Subscribe(id = "resourcePoliciesDc", target = Target.DATA_CONTAINER)
+    public void onResourcePoliciesDcCollectionChange(final CollectionContainer.CollectionChangeEvent<ResourcePolicyModel> event) {
+
     }
 
 
