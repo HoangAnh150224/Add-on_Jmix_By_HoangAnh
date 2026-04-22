@@ -23,7 +23,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.vn:rolemanager-starter:01-VN'
+    implementation 'com.qlpv:rolemanager-starter:01-QLPV-SNAPSHOT'
 
 
     implementation 'io.jmix.core:jmix-core-starter'

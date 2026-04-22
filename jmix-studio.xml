@@ -43,4 +43,7 @@
       </entry>
     </moduleSettings>
   </component>
+  <component name="JmixPluginProjectSettings">
+    <option name="roleMultilineAnnotations" value="false" />
+  </component>
 </project>
