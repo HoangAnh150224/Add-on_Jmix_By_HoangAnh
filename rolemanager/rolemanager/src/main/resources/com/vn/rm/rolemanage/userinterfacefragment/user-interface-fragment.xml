@@ -9,7 +9,12 @@
     </data>
 
     <content>
-        <vbox id="policyBox" padding="true" spacing="false">
+        <vbox id="policyBox"
+              width="100%"
+              height="100%"
+              padding="true"
+              spacing="false"
+              expand="policyTreeGrid">
             <hbox spacing="true" alignItems="CENTER">
                 <checkbox id="allowAllViews" label="Cho phép tất cả màn hình"/>
             </hbox>
