@@ -3,12 +3,15 @@ buildscript {
         gradlePluginPortal()
     }
     dependencies {
-        classpath "io.jmix.gradle:jmix-gradle-plugin:2.7.1"
+        classpath "io.jmix.gradle:jmix-gradle-plugin:3.0.0"
     }
 }
 
 group = 'com.qlpv'
-version = '02-QLPV-SNAPSHOT'
+version = '0.0.3-SNAPSHOT'
+
+// để root project có task clean
+apply plugin: 'base'
 
 subprojects {
     apply plugin: 'java-library'
@@ -17,22 +20,32 @@ subprojects {
 
     repositories {
         mavenCentral()
+
         maven {
             url = 'https://global.repo.jmix.io/repository/public'
         }
+
+        maven {
+            url = 'https://nexus.x2h.com.vn/repository/jmix-internal-snapshots/'
+
+            credentials {
+                username = rootProject.findProperty('nexusUsername') ?: System.getenv('NEXUS_USERNAME')
+                password = rootProject.findProperty('nexusPassword') ?: System.getenv('NEXUS_PASSWORD')
+            }
+        }
     }
 
-
     jmix {
-        bomVersion = '2.7.1'
+        bomVersion = '3.0.0'
         projectId = 'rm'
     }
 
-    group = this.group
-    version = this.version
+    group = rootProject.group
+    version = rootProject.version
 
     def props = new Properties()
     buildFile.withInputStream { props.load(it) }
+
     def subArchivesBaseName = props.getProperty('archivesBaseName')
     def archName = subArchivesBaseName.substring(1, subArchivesBaseName.length() - 1)
 
@@ -47,13 +60,13 @@ subprojects {
     publishing {
         repositories {
             maven {
-                name = 'CustomNexus'
-                url = 'http://27.118.20.16:8099/repository/jmix-custom-addons' // Replace with your Nexus repo URL
+                name = 'NexusSnapshots'
+                url = uri('https://nexus.x2h.com.vn/repository/jmix-internal-snapshots/')
+
                 credentials {
-                    username = project.findProperty('nexusUsername') ?: 'your-username'
-                    password = project.findProperty('nexusPassword') ?: 'your-password'
+                    username = rootProject.findProperty('nexusUsername') ?: System.getenv('NEXUS_USERNAME')
+                    password = rootProject.findProperty('nexusPassword') ?: System.getenv('NEXUS_PASSWORD')
                 }
-                allowInsecureProtocol = true
             }
         }
 
@@ -65,13 +78,12 @@ subprojects {
         }
     }
 
-
     // remove after https://youtrack.jetbrains.com/issue/IDEA-227215 is fixed
     tasks.withType(GenerateModuleMetadata) {
         enabled = false
     }
 
-    project.tasks.withType(JavaCompile).configureEach {
+    tasks.withType(JavaCompile).configureEach {
         options.compilerArgs.add("-parameters")
     }
 }
